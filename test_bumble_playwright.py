@@ -94,23 +94,71 @@ def test_chat_flow():
                 raise Exception("No conversations found in the list")
 
             print(f"✓ Found {len(conversation_items)} conversation(s)")
-            print("Opening first conversation...")
-
+            
+            # Find the first conversation that needs a reply (contains "Your move")
+            target_contact = page.evaluate("""
+                () => {
+                    const contacts = document.querySelectorAll('.contact');
+                    for (let contact of contacts) {
+                        const text = contact.textContent || '';
+                        // Skip if already selected
+                        if (contact.classList.contains('is-selected')) continue;
+                        // Check if it contains "Your move" indicating user needs to reply
+                        if (text.includes('Your move')) {
+                            return {
+                                found: true,
+                                index: Array.from(contacts).indexOf(contact)
+                            };
+                        }
+                    }
+                    return { found: false };
+                }
+            """)
+            
+            if not target_contact or not target_contact.get('found'):
+                raise Exception("No conversations found that need a reply")
+            
+            contact_index = target_contact.get('index', 0)
+            print(f"Opening conversation that needs reply (index {contact_index})...")
+            
+            # Get the name of the conversation we're about to open
+            target_name = page.evaluate(f"""
+                () => {{
+                    const contacts = document.querySelectorAll('.contact');
+                    const contact = contacts[{contact_index}];
+                    if (contact) {{
+                        const text = contact.textContent || '';
+                        return text.split('\\n')[0]?.trim() || '';
+                    }}
+                    return '';
+                }}
+            """)
+            
             try:
-                page.click(".contact:first-of-type img", timeout=5000)
+                # Try clicking the image in the target contact
+                page.click(f".contact:nth-of-type({contact_index + 1}) img", timeout=5000)
             except Exception:
-                page.evaluate("""
-                    () => {
-                        const contact = document.querySelector('.contact:first-of-type');
-                        if (contact) {
+                # Fallback: use JavaScript to click
+                page.evaluate(f"""
+                    () => {{
+                        const contacts = document.querySelectorAll('.contact');
+                        const contact = contacts[{contact_index}];
+                        if (contact) {{
                             const img = contact.querySelector('img');
                             if (img) img.click();
                             else contact.click();
-                        }
-                    }
+                        }}
+                    }}
                 """)
-
+            
+            # Wait for the conversation to be marked as selected
+            page.wait_for_selector(f".contact:nth-of-type({contact_index + 1}).is-selected", timeout=5000)
+            
+            # Wait for messages to appear (this ensures the conversation view has loaded)
             page.wait_for_selector(".message", timeout=10000)
+            
+            # Give a moment for the UI to fully settle
+            page.wait_for_timeout(500)
 
             message_bubbles = page.query_selector_all(".message")
             if not message_bubbles:
@@ -126,15 +174,26 @@ def test_chat_flow():
                 except Exception:
                     print(f"{i}. [Unable to read message]")
 
-            message_input = page.query_selector(".textarea__input")
+            # Get the input field from within the main chat area (not from a stale conversation)
+            message_input = page.query_selector("main .textarea__input")
+            if not message_input:
+                # Fallback to any input if main doesn't have one
+                message_input = page.query_selector(".textarea__input")
             if not message_input:
                 raise Exception("Message input box not found")
 
+            # Verify the input is visible and enabled
+            if not message_input.is_visible():
+                raise Exception("Message input box is not visible")
+
             test_message = "<3"
-            print(f"\nSending test message: '{test_message}'")
+            print(f"\nSending test message to {target_name}: '{test_message}'")
             message_input.fill(test_message)
 
-            send_button = page.query_selector(".message-field__send")
+            # Get the send button from within the main chat area
+            send_button = page.query_selector("main .message-field__send")
+            if not send_button:
+                send_button = page.query_selector(".message-field__send")
             if not send_button:
                 raise Exception("Send button not found")
 
