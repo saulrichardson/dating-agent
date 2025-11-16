@@ -13,6 +13,9 @@ venv.bak/
 # Playwright
 auth-state.json
 
+# Context Service
+context_service/context_storage.json
+
 # IDE
 .vscode/
 .idea/
