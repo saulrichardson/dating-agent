@@ -4,6 +4,7 @@ Minimal HTTP server for context storage service.
 """
 
 from flask import Flask, request, jsonify
+import json
 
 try:
     from .storage import ContextStorage
@@ -64,6 +65,30 @@ def get_all_user_contexts(user_id: str):
         "user_id": user_id,
         "contexts": contexts
     })
+
+
+@app.route('/persona/<user_id>', methods=['POST', 'PUT'])
+def set_persona(user_id: str):
+    """Set persona profile for a user."""
+    data = request.get_json()
+    if not data or 'persona' not in data:
+        return jsonify({"error": "Missing 'persona' in request body"}), 400
+    
+    persona = data['persona']
+    storage.set_context(user_id, "_persona", json.dumps(persona))
+    return jsonify({
+        "user_id": user_id,
+        "status": "saved"
+    })
+
+
+@app.route('/persona/<user_id>', methods=['GET'])
+def get_persona(user_id: str):
+    """Get persona profile for a user."""
+    persona_str = storage.get_context(user_id, "_persona")
+    if persona_str is None:
+        return jsonify({"error": "Persona not found"}), 404
+    return jsonify({"user_id": user_id, "persona": json.loads(persona_str)})
 
 
 if __name__ == '__main__':

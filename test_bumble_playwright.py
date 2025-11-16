@@ -95,7 +95,7 @@ def test_chat_flow():
 
             print(f"✓ Found {len(conversation_items)} conversation(s)")
             
-            # Find the first conversation that needs a reply (contains "Your move")
+            # First, check if there's a "Your move" conversation already visible
             target_contact = page.evaluate("""
                 () => {
                     const contacts = document.querySelectorAll('.contact');
@@ -115,6 +115,49 @@ def test_chat_flow():
                 }
             """)
             
+            # Only scroll if we didn't find a "Your move" conversation
+            if not target_contact or not target_contact.get('found'):
+                print("No 'Your move' conversation found in visible list, scrolling to load more...")
+                search_attempts = 0
+                max_search_attempts = 10
+                
+                while search_attempts < max_search_attempts:
+                    # Scroll down to load additional conversations
+                    page.evaluate("""
+                        () => {
+                            const scrollContainer = document.querySelector('.scroll__inner');
+                            if (scrollContainer) {
+                                scrollContainer.scrollTop = scrollContainer.scrollHeight;
+                            }
+                        }
+                    """)
+                    page.wait_for_timeout(1000)
+                    
+                    # Search again after scrolling
+                    target_contact = page.evaluate("""
+                        () => {
+                            const contacts = document.querySelectorAll('.contact');
+                            for (let contact of contacts) {
+                                const text = contact.textContent || '';
+                                // Skip if already selected
+                                if (contact.classList.contains('is-selected')) continue;
+                                // Check if it contains "Your move" indicating user needs to reply
+                                if (text.includes('Your move')) {
+                                    return {
+                                        found: true,
+                                        index: Array.from(contacts).indexOf(contact)
+                                    };
+                                }
+                            }
+                            return { found: false };
+                        }
+                    """)
+                    
+                    if target_contact and target_contact.get('found'):
+                        break
+                    
+                    search_attempts += 1
+            
             if not target_contact or not target_contact.get('found'):
                 raise Exception("No conversations found that need a reply")
             
@@ -127,8 +170,16 @@ def test_chat_flow():
                     const contacts = document.querySelectorAll('.contact');
                     const contact = contacts[{contact_index}];
                     if (contact) {{
+                        const nameElement = contact.querySelector('.contact__name') || 
+                                           contact.querySelector('[class*="name"]') ||
+                                           contact.firstElementChild;
+                        if (nameElement) {{
+                            const name = nameElement.textContent?.trim() || nameElement.innerText?.trim() || '';
+                            return name.split('\\n')[0]?.split('Your move')[0]?.trim() || '';
+                        }}
                         const text = contact.textContent || '';
-                        return text.split('\\n')[0]?.trim() || '';
+                        const firstLine = text.split('\\n')[0]?.trim() || '';
+                        return firstLine.split('Your move')[0]?.trim() || firstLine;
                     }}
                     return '';
                 }}
@@ -170,9 +221,31 @@ def test_chat_flow():
             print(f"\n=== Last {num_messages} Message(s) ===")
             for i, msg in enumerate(last_messages, 1):
                 try:
-                    print(f"{i}. {msg.inner_text().strip()}")
-                except Exception:
-                    print(f"{i}. [Unable to read message]")
+                    msg_info = msg.evaluate("""
+                        (element) => {
+                            const hasImg = element.querySelector('img') !== null;
+                            const hasVideo = element.querySelector('video') !== null;
+                            const innerHTML = element.innerHTML || '';
+                            const hasGif = innerHTML.includes('gif') || innerHTML.includes('GIF');
+                            const text = element.innerText?.trim() || element.textContent?.trim() || '';
+                            
+                            let type = 'text';
+                            if (hasVideo || hasGif) type = 'gif';
+                            else if (hasImg) type = 'image';
+                            
+                            return { type: type, text: text };
+                        }
+                    """)
+                    
+                    msg_type = msg_info['type']
+                    msg_text = msg_info['text']
+                    
+                    if msg_type in ['gif', 'image']:
+                        print(f"{i}. [{msg_type.upper()}] {msg_text if msg_text else '(no caption)'}")
+                    else:
+                        print(f"{i}. {msg_text if msg_text else '(empty message)'}")
+                except Exception as e:
+                    print(f"{i}. [Unable to read message: {e}]")
 
             # Get the input field from within the main chat area (not from a stale conversation)
             message_input = page.query_selector("main .textarea__input")
@@ -217,6 +290,18 @@ def test_chat_flow():
             browser.close()
 
 
+def extract_chat_history():
+    """Extract all chat history and upload persona."""
+    try:
+        from extract_chat_history import extract_and_upload_chat_history
+        user_id = input("Enter user ID (or press Enter for 'default'): ").strip() or "default"
+        extract_and_upload_chat_history(user_id)
+    except ImportError:
+        print("❌ Error: extract_chat_history module not found!")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+
+
 def main():
     """
     Main function that provides a menu to choose between saving auth state or testing chat flow.
@@ -227,19 +312,22 @@ def main():
     print("\nOptions:")
     print("1. Save authentication state (run this first)")
     print("2. Test chat flow (requires saved auth state)")
-    print("3. Exit")
+    print("3. Extract chat history & upload persona")
+    print("4. Exit")
 
-    choice = input("\nEnter your choice (1-3): ").strip()
+    choice = input("\nEnter your choice (1-4): ").strip()
 
     if choice == "1":
         save_auth_state()
     elif choice == "2":
         test_chat_flow()
     elif choice == "3":
+        extract_chat_history()
+    elif choice == "4":
         print("Exiting...")
         sys.exit(0)
     else:
-        print("Invalid choice. Please choose 1, 2, or 3.")
+        print("Invalid choice. Please choose 1, 2, 3, or 4.")
 
 
 if __name__ == "__main__":
