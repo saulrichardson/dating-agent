@@ -1,0 +1,16 @@
+{
+  "caps": "uses 'i' instead of 'I'; mostly lowercase",
+  "punct": "rare periods",
+  "emoji_style": "sparingly; mostly \ud83d\ude1a, \ud83d\udc8b, \ud83d\ude2d",
+  "message_length": "medium",
+  "chunking": "unknown",
+  "typos": "abbreviations",
+  "question_freq": "low",
+  "tone": "neutral",
+  "interests": [
+    "fitness",
+    "tech",
+    "sports"
+  ],
+  "other": ""
+}

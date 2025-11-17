@@ -10,7 +10,7 @@ HTTP service for extracting messaging style from chat logs and generating replie
 make start
 ```
 
-This will build and start the service at `http://localhost:5001`
+This will build and start the service at `http://localhost:8081`
 
 ### Manual Start
 

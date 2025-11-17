@@ -22,12 +22,12 @@ services:
     build: ./persona_service
     container_name: persona-service
     ports:
-      - "5001:5001"
+      - "8081:8081"
     environment:
       - FLASK_ENV=development
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/health')"]
       interval: 30s
       timeout: 10s
       retries: 3

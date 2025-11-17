@@ -14,7 +14,7 @@ help:
 	@echo ""
 	@echo "Services:"
 	@echo "  - Context Service:  http://localhost:8080"
-	@echo "  - Persona Service:   http://localhost:5001"
+	@echo "  - Persona Service:   http://localhost:8081"
 
 build:
 	docker-compose build
@@ -24,7 +24,7 @@ up:
 	@echo ""
 	@echo "✓ Services started:"
 	@echo "  - Context Service: http://localhost:8080"
-	@echo "  - Persona Service: http://localhost:5001"
+	@echo "  - Persona Service: http://localhost:8081"
 
 down:
 	docker-compose down

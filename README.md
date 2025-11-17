@@ -7,7 +7,7 @@ Dating app automation with persona extraction and context management services.
 This project includes two microservices:
 
 - **Context Service** (`http://localhost:8080`) - Manages conversation context per user/match
-- **Persona Service** (`http://localhost:5001`) - Extracts messaging style and generates replies
+- **Persona Service** (`http://localhost:8081`) - Extracts messaging style and generates replies
 
 ### Quick Start (All Services)
 
