@@ -3,7 +3,13 @@ Example usage of persona extraction and reply generation.
 """
 
 import json
-from persona import extract_persona, generate_reply
+import sys
+import os
+
+# Allow running as script from persona_service directory
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from persona_service.persona import extract_persona, generate_reply
 
 
 def example_chat_logs():
@@ -58,4 +64,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 

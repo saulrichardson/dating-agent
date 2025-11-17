@@ -293,7 +293,7 @@ def test_chat_flow():
 def extract_chat_history():
     """Extract all chat history and upload persona."""
     try:
-        from extract_chat_history import extract_and_upload_chat_history
+        from persona_service.extract_chat_history import extract_and_upload_chat_history
         user_id = input("Enter user ID (or press Enter for 'default'): ").strip() or "default"
         extract_and_upload_chat_history(user_id)
     except ImportError:

@@ -6,9 +6,16 @@ Extract all chat history from Bumble and upload to persona service.
 from playwright.sync_api import sync_playwright
 import json
 import sys
+import os
 import requests
 from typing import List, Dict, Any
-from persona import extract_persona
+
+# Allow running as script
+if __name__ == "__main__":
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from persona_service.persona import extract_persona
+else:
+    from .persona import extract_persona
 
 CONTEXT_SERVICE_URL = "http://localhost:5000"
 CHUNK_SIZE = 50

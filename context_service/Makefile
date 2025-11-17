@@ -23,3 +23,6 @@ start: build up
 	@echo "Context service is running at http://localhost:5000"
 	@echo "View logs with: make logs"
 
+
+
+

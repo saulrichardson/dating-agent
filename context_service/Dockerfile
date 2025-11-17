@@ -15,3 +15,6 @@ EXPOSE 5000
 # Run the server
 CMD ["python", "server.py"]
 
+
+
+
