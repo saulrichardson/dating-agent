@@ -1,6 +1,35 @@
 # Concierge
 
-Python environment setup for Playwright automation.
+Dating app automation with persona extraction and context management services.
+
+## Services
+
+This project includes two microservices:
+
+- **Context Service** (`http://localhost:8080`) - Manages conversation context per user/match
+- **Persona Service** (`http://localhost:5001`) - Extracts messaging style and generates replies
+
+### Quick Start (All Services)
+
+```bash
+make start
+```
+
+This will build and start both services. View logs with `make logs`.
+
+### Individual Service Management
+
+Each service can also be managed independently:
+
+```bash
+# Context Service
+cd context_service && make start
+
+# Persona Service  
+cd persona_service && make start
+```
+
+See `make help` for all available commands.
 
 ## Setup
 
