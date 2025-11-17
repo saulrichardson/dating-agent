@@ -57,6 +57,42 @@ pip install -r requirements.txt
 playwright install chromium
 ```
 
+## Testing
+
+Both services include unit and integration tests using pytest.
+
+### Running Tests
+
+**Context Service:**
+```bash
+cd context_service
+source ../venv/bin/activate
+make test
+# or: pytest tests/ -v
+```
+
+**Persona Service:**
+```bash
+cd persona_service
+source ../venv/bin/activate
+make test
+# or: pytest tests/ -v
+```
+
+### Test Coverage
+
+- **Unit Tests**: Test individual components in isolation (e.g., storage logic)
+- **Integration Tests**: Test API endpoints using Flask's test client
+
+**Context Service** includes:
+- 6 unit tests for storage operations
+- 7 integration tests for API endpoints
+
+**Persona Service** includes:
+- 4 integration tests for API endpoints and validation
+
+All tests use temporary files and isolated test clients, so they don't interfere with running services.
+
 ## Usage
 
 **Important:** Always activate the virtual environment before running the script:
