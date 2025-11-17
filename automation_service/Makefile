@@ -19,6 +19,6 @@ clean:
 	docker-compose down -v
 
 start: build up
-	@echo "Persona service is running at http://localhost:8081"
+	@echo "Automation service is running at http://localhost:8082"
 	@echo "View logs with: make logs"
 

@@ -1,36 +1,23 @@
-#!/usr/bin/env python3
 """
-Playwright Script for Dating App UI Automation
-
-USAGE:
-    Step 1: Save Authentication State
-        Run: python test_bumble_playwright.py
-        Choose option 1 to save auth state
-        - Browser will open to the login page
-        - Manually log in to your account
-        - Once logged in, press Enter in the terminal
-        - Auth state will be saved to 'auth-state.json'
-
-    Step 2: Test Chat Flow
-        Run: python test_bumble_playwright.py
-        Choose option 2 to test chat flow
-        - Browser will open with saved auth state (auto-logged in)
-        - Script will navigate to messages page
-        - Click first conversation
-        - Print last few messages
-        - Send a test message
-
-IMPORTANT:
-    This script uses actual CSS selectors discovered via Chrome DevTools inspection:
-    - Conversation items: .contact
-    - Messages: .message
-    - Input: .textarea__input
-    - Send button: .message-field__send
+Browser automation functions for dating app.
 """
 
 from playwright.sync_api import sync_playwright
 import json
 import sys
+import os
+
+def _extract_and_upload_chat_history(user_id):
+    """Extract chat history using persona service."""
+    try:
+        import sys
+        import os
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from persona_service.extract_chat_history import extract_and_upload_chat_history
+        extract_and_upload_chat_history(user_id)
+    except ImportError:
+        print("❌ Error: persona_service not available")
+        return
 
 
 def save_auth_state():
@@ -290,45 +277,12 @@ def test_chat_flow():
             browser.close()
 
 
-def extract_chat_history():
+def extract_chat_history(user_id=None):
     """Extract all chat history and upload persona."""
     try:
-        from persona_service.extract_chat_history import extract_and_upload_chat_history
-        user_id = input("Enter user ID (or press Enter for 'default'): ").strip() or "default"
-        extract_and_upload_chat_history(user_id)
-    except ImportError:
-        print("❌ Error: extract_chat_history module not found!")
+        if user_id is None:
+            user_id = input("Enter user ID (or press Enter for 'default'): ").strip() or "default"
+        _extract_and_upload_chat_history(user_id)
     except Exception as e:
         print(f"❌ Error: {e}")
 
-
-def main():
-    """
-    Main function that provides a menu to choose between saving auth state or testing chat flow.
-    """
-    print("=" * 60)
-    print("Playwright Dating App Automation Script")
-    print("=" * 60)
-    print("\nOptions:")
-    print("1. Save authentication state (run this first)")
-    print("2. Test chat flow (requires saved auth state)")
-    print("3. Extract chat history & upload persona")
-    print("4. Exit")
-
-    choice = input("\nEnter your choice (1-4): ").strip()
-
-    if choice == "1":
-        save_auth_state()
-    elif choice == "2":
-        test_chat_flow()
-    elif choice == "3":
-        extract_chat_history()
-    elif choice == "4":
-        print("Exiting...")
-        sys.exit(0)
-    else:
-        print("Invalid choice. Please choose 1, 2, 3, or 4.")
-
-
-if __name__ == "__main__":
-    main()
