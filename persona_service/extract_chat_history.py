@@ -182,7 +182,7 @@ def extract_and_upload_chat_history(user_id: str = "default"):
             auth_state = json.load(f)
     except FileNotFoundError:
         print("❌ Error: 'auth-state.json' not found!")
-        print("   Please run test_bumble_playwright.py option 1 first.")
+        print("   Please run 'python -m automation_service.cli' option 1 first.")
         return
     
     with sync_playwright() as p:

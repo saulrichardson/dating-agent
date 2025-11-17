@@ -13,8 +13,9 @@ help:
 	@echo "  make status    - Show service status"
 	@echo ""
 	@echo "Services:"
-	@echo "  - Context Service:  http://localhost:8080"
-	@echo "  - Persona Service:   http://localhost:8081"
+	@echo "  - Context Service:    http://localhost:8080"
+	@echo "  - Persona Service:    http://localhost:8081"
+	@echo "  - Automation Service: http://localhost:8082"
 
 build:
 	docker-compose build
@@ -23,8 +24,9 @@ up:
 	docker-compose up -d
 	@echo ""
 	@echo "✓ Services started:"
-	@echo "  - Context Service: http://localhost:8080"
-	@echo "  - Persona Service: http://localhost:8081"
+	@echo "  - Context Service:    http://localhost:8080"
+	@echo "  - Persona Service:    http://localhost:8081"
+	@echo "  - Automation Service: http://localhost:8082"
 
 down:
 	docker-compose down
