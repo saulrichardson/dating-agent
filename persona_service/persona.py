@@ -1,7 +1,7 @@
 """
-Persona extraction and reply generation for chat logs.
+Persona extraction from chat logs.
 
-Extracts messaging style from past chats and generates replies in that style.
+Extracts messaging style from past chats to provide context to Automation Service.
 """
 
 import json

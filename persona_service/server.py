@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-HTTP server for persona extraction and reply generation.
+HTTP server for persona extraction.
+
+Extracts messaging style from chat logs and provides it to Automation Service via Context Service.
 """
 
 from flask import Flask, request, jsonify
 
 try:
-    from .persona import extract_persona, generate_reply
+    from .persona import extract_persona
 except ImportError:
-    from persona import extract_persona, generate_reply
+    from persona import extract_persona
 
 app = Flask(__name__)
 
@@ -30,28 +32,6 @@ def extract():
     try:
         persona = extract_persona(chat_logs)
         return jsonify({"persona": persona})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/generate', methods=['POST'])
-def generate():
-    """Generate a reply based on persona and recent messages."""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Missing request body"}), 400
-    
-    if 'persona' not in data:
-        return jsonify({"error": "Missing 'persona' in request body"}), 400
-    if 'recent_messages' not in data:
-        return jsonify({"error": "Missing 'recent_messages' in request body"}), 400
-    
-    persona = data['persona']
-    recent_messages = data['recent_messages']
-    
-    try:
-        reply = generate_reply(persona, recent_messages)
-        return jsonify({"reply": reply})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
