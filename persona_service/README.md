@@ -1,6 +1,6 @@
 # Persona Service
 
-HTTP service for extracting messaging style from chat logs and generating replies.
+HTTP service for extracting messaging style from chat logs. Provides extracted persona to Automation Service via Context Service.
 
 ## Quick Start
 
@@ -45,22 +45,11 @@ Content-Type: application/json
 
 Returns: `{"persona": {...}}`
 
-### Generate Reply
+## How It Works
 
-```bash
-POST /generate
-Content-Type: application/json
-
-{
-  "persona": {...},
-  "recent_messages": [
-    {"text": "Hey!", "sender": "other"},
-    {"text": "hi", "sender": "me"}
-  ]
-}
-```
-
-Returns: `{"reply": "..."}`
+1. **Extract Persona**: Analyzes chat logs to extract messaging style (capitalization, punctuation, emoji usage, tone, etc.)
+2. **Store in Context Service**: The extracted persona is stored in Context Service where Automation Service can access it
+3. **Provide Context**: Automation Service retrieves the persona from Context Service to maintain consistent messaging style
 
 ## Makefile Commands
 

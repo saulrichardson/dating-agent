@@ -1,5 +1,5 @@
 """
-Example usage of persona extraction and reply generation.
+Example usage of persona extraction.
 """
 
 import json
@@ -9,7 +9,7 @@ import os
 # Allow running as script from persona_service directory
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from persona_service.persona import extract_persona, generate_reply
+from persona_service.persona import extract_persona
 
 
 def example_chat_logs():
@@ -49,17 +49,10 @@ def main():
     print(json.dumps(persona, indent=2))
     
     print("\n" + "=" * 60)
-    print("Reply Generation Example")
+    print("Persona Usage")
     print("=" * 60)
-    
-    recent_messages = example_recent_messages()
-    print("\nRecent conversation:")
-    for msg in recent_messages:
-        print(f"  {msg['sender']}: {msg['text']}")
-    
-    print("\nGenerated reply (STUB):")
-    reply = generate_reply(persona, recent_messages)
-    print(reply)
+    print("\nThis persona can be stored in Context Service and used by")
+    print("Automation Service to maintain consistent messaging style.")
 
 
 if __name__ == "__main__":
