@@ -1,0 +1,17 @@
+{
+  "capabilities": {
+    "alwaysMatch": {
+      "platformName": "Android",
+      "appium:automationName": "UiAutomator2",
+      "appium:deviceName": "Android",
+      "appium:noReset": true,
+
+      "appium:appPackage": "com.example.app",
+      "appium:appActivity": ".MainActivity"
+    },
+    "firstMatch": [
+      {}
+    ]
+  }
+}
+

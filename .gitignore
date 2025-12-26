@@ -16,6 +16,9 @@ auth-state.json
 # Context Service
 context_service/context_storage.json
 
+# Local artifacts / debug dumps
+artifacts/
+
 # IDE
 .vscode/
 .idea/
@@ -26,4 +29,3 @@ context_service/context_storage.json
 # OS
 .DS_Store
 Thumbs.db
-

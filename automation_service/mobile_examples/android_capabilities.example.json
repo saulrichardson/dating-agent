@@ -1,0 +1,14 @@
+{
+  "capabilities": {
+    "alwaysMatch": {
+      "platformName": "Android",
+      "appium:automationName": "UiAutomator2",
+      "appium:deviceName": "Android",
+      "appium:noReset": true
+    },
+    "firstMatch": [
+      {}
+    ]
+  }
+}
+
