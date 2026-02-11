@@ -1,6 +1,6 @@
 # Automation Service
 
-HTTP service and CLI for dating app UI automation using Playwright.
+HTTP service and CLI for dating app UI automation using Playwright and Appium.
 
 ## Quick Start
 
@@ -79,4 +79,3 @@ Starts chat history extraction and persona upload.
 - `make restart` - Restart service
 - `make clean` - Stop and remove volumes
 - `make start` - Build and start (recommended)
-
