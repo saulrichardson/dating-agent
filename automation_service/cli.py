@@ -232,6 +232,8 @@ def main():
         print(f"  Passes: {result.passes}")
         print(f"  Messages: {result.messages}")
         print(f"  Action log: {result.action_log_path}")
+        if result.packet_log_path is not None:
+            print(f"  Packet log: {result.packet_log_path}")
         print(f"  Artifacts: {len(result.artifacts)}")
         for artifact in result.artifacts:
             print(f"    - {artifact}")

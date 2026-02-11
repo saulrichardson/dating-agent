@@ -15,6 +15,9 @@
   "max_actions": 20,
   "loop_sleep_s": 1.0,
   "capture_each_action": true,
+  "persist_packet_log": true,
+  "packet_capture_screenshot": true,
+  "packet_capture_xml": false,
   "validation": {
     "enabled": true,
     "post_action_sleep_s": 0.8,

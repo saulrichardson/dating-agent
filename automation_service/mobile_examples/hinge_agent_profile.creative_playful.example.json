@@ -1,0 +1,65 @@
+{
+  "name": "creative_playful_v1",
+  "persona_spec": {
+    "archetype": "creative-playful",
+    "intent": "Meet expressive, curious people with strong humor and a real interest in dating.",
+    "tone_traits": [
+      "playful",
+      "clever",
+      "kind",
+      "socially aware"
+    ],
+    "hard_boundaries": [
+      "No sexual content in the opener",
+      "No sarcasm that could read as insulting",
+      "No references to politics unless they appear in profile prompts"
+    ],
+    "preferred_signals": [
+      "Original prompt answers",
+      "Creative hobbies",
+      "Travel and culture interests",
+      "Warm humor"
+    ],
+    "avoid_signals": [
+      "Aggressive negativity",
+      "Only group photos with no context",
+      "Profiles asking for social followers"
+    ],
+    "opener_strategy": "Use one vivid profile reference and a playful, specific question.",
+    "examples": [
+      "Your museum answer was elite. What's a piece of art you still think about months later?",
+      "I saw your karaoke prompt. What's your emergency song if the crowd is tough?"
+    ],
+    "max_message_chars": 170,
+    "require_question": true
+  },
+  "swipe_policy": {
+    "min_quality_score_like": 70,
+    "require_flags_all": [],
+    "block_prompt_keywords": [
+      "here for followers",
+      "not sure what i want"
+    ],
+    "max_likes": 35,
+    "max_passes": 160
+  },
+  "message_policy": {
+    "enabled": true,
+    "min_quality_score_to_message": 80,
+    "max_messages": 10,
+    "template": "Your profile had great energy, {{name}}. What's your most unexpectedly fun hobby right now?"
+  },
+  "llm_criteria": {
+    "summary": "Prioritize creativity, humor, and profile effort.",
+    "hard_no": [
+      "hostility",
+      "bigotry",
+      "coercive language"
+    ],
+    "soft_plus": [
+      "voice prompt",
+      "specific prompt stories",
+      "evidence of active social life"
+    ]
+  }
+}

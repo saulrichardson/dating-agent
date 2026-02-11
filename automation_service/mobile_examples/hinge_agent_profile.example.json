@@ -1,32 +1,69 @@
 {
-  "name": "saul_v1",
+  "name": "intentional_warm_v2",
+  "persona_spec": {
+    "archetype": "intentional-warm",
+    "intent": "Find emotionally available people who can hold a thoughtful conversation and are genuinely looking for a relationship.",
+    "tone_traits": [
+      "warm",
+      "confident",
+      "curious",
+      "lightly playful"
+    ],
+    "hard_boundaries": [
+      "No sexual language in the opener",
+      "No manipulative or negging language",
+      "No pressure to move off-app immediately"
+    ],
+    "preferred_signals": [
+      "Specific, personal prompt answers",
+      "Signs of emotional maturity",
+      "Active lifestyle and hobbies",
+      "Kind humor"
+    ],
+    "avoid_signals": [
+      "Hostile profile text",
+      "Low-effort blank prompts",
+      "Heavy cynicism about dating"
+    ],
+    "opener_strategy": "Reference one concrete profile detail, then ask one easy-to-answer question that opens a real conversation.",
+    "examples": [
+      "Your trail-running prompt caught my eye. Do you have a favorite weekend route lately?",
+      "I liked your cooking answer. What's your go-to dish when you want to impress people?"
+    ],
+    "max_message_chars": 180,
+    "require_question": true
+  },
   "swipe_policy": {
-    "min_quality_score_like": 72,
+    "min_quality_score_like": 74,
     "require_flags_all": [
       "selfie_verified"
     ],
     "block_prompt_keywords": [
-      "crypto",
-      "smoking"
+      "smoking",
+      "no drama",
+      "here for followers"
     ],
-    "max_likes": 25,
-    "max_passes": 120
+    "max_likes": 30,
+    "max_passes": 150
   },
   "message_policy": {
     "enabled": true,
-    "min_quality_score_to_message": 85,
-    "max_messages": 5,
-    "template": "Hey {{name}}, your profile stood out. What's something you're excited about this week?"
+    "min_quality_score_to_message": 82,
+    "max_messages": 8,
+    "template": "Hey {{name}}, I liked your profile. What's something this month you're genuinely excited about?"
   },
   "llm_criteria": {
-    "summary": "Prefer thoughtful, active profiles with strong prompts and clear intent.",
+    "summary": "Bias toward profiles that demonstrate effort, emotional intelligence, and clear relationship intent.",
     "hard_no": [
-      "explicit hostile or abusive content"
+      "abusive or hateful language",
+      "explicit sexual opener cues",
+      "clear scam or monetization intent"
     ],
     "soft_plus": [
-      "creative prompt answers",
-      "active today",
-      "voice prompt"
-    ]
+      "voice prompt",
+      "creative writing in prompts",
+      "active today"
+    ],
+    "first_message_goal": "Generate a short opener that feels personal, natural, and easy to respond to."
   }
 }
