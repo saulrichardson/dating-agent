@@ -10,6 +10,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# Environment files (local secrets)
+.env
+
 # Playwright
 auth-state.json
 
