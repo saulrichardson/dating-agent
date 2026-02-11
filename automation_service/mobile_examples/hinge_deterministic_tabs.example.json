@@ -1,0 +1,207 @@
+{
+  "appium_server_url": "http://127.0.0.1:4723",
+  "capabilities_json_path": "automation_service/mobile_examples/android_capabilities.example.json",
+  "artifacts_dir": "artifacts",
+  "pause_before_start": false,
+  "default_retry": {
+    "attempts": 2,
+    "sleep_s": 0.5
+  },
+  "steps": [
+    {
+      "name": "hinge_capture_start",
+      "action": "screenshot"
+    },
+    {
+      "name": "hinge_wait_bottom_nav",
+      "action": "wait_for_any",
+      "locators": [
+        {
+          "using": "accessibility id",
+          "value": "Discover"
+        },
+        {
+          "using": "accessibility id",
+          "value": "Matches"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Discover\")"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Matches\")"
+        }
+      ],
+      "timeout_s": 15,
+      "poll_s": 0.5
+    },
+    {
+      "name": "hinge_go_matches",
+      "action": "click_any",
+      "locators": [
+        {
+          "using": "accessibility id",
+          "value": "Matches"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Matches\")"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().textContains(\"Matches\")"
+        }
+      ]
+    },
+    {
+      "name": "hinge_pause_after_matches",
+      "action": "sleep",
+      "seconds": 1.0
+    },
+    {
+      "name": "hinge_capture_matches",
+      "action": "screenshot"
+    },
+    {
+      "name": "hinge_go_likes_you",
+      "action": "click_any",
+      "locators": [
+        {
+          "using": "accessibility id",
+          "value": "Likes You"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Likes You\")"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().textContains(\"Likes\")"
+        }
+      ]
+    },
+    {
+      "name": "hinge_pause_after_likes_you",
+      "action": "sleep",
+      "seconds": 1.0
+    },
+    {
+      "name": "hinge_capture_likes_you",
+      "action": "screenshot"
+    },
+    {
+      "name": "hinge_go_standouts",
+      "action": "click_any",
+      "locators": [
+        {
+          "using": "accessibility id",
+          "value": "Standouts"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Standouts\")"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().textContains(\"Standouts\")"
+        }
+      ]
+    },
+    {
+      "name": "hinge_pause_after_standouts",
+      "action": "sleep",
+      "seconds": 1.0
+    },
+    {
+      "name": "hinge_capture_standouts",
+      "action": "screenshot"
+    },
+    {
+      "name": "hinge_go_discover",
+      "action": "click_any",
+      "locators": [
+        {
+          "using": "accessibility id",
+          "value": "Discover"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Discover\")"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().textContains(\"Discover\")"
+        }
+      ]
+    },
+    {
+      "name": "hinge_pause_after_discover",
+      "action": "sleep",
+      "seconds": 1.0
+    },
+    {
+      "name": "hinge_capture_discover",
+      "action": "screenshot"
+    },
+    {
+      "name": "hinge_go_profile_hub",
+      "action": "click_any",
+      "locators": [
+        {
+          "using": "accessibility id",
+          "value": "Profile Hub"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Profile Hub\")"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().textContains(\"Profile\")"
+        }
+      ]
+    },
+    {
+      "name": "hinge_pause_after_profile_hub",
+      "action": "sleep",
+      "seconds": 1.0
+    },
+    {
+      "name": "hinge_capture_profile_hub",
+      "action": "screenshot"
+    },
+    {
+      "name": "hinge_return_discover",
+      "action": "click_any",
+      "locators": [
+        {
+          "using": "accessibility id",
+          "value": "Discover"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Discover\")"
+        }
+      ]
+    },
+    {
+      "name": "hinge_pause_after_return_discover",
+      "action": "sleep",
+      "seconds": 1.0
+    },
+    {
+      "name": "hinge_capture_end",
+      "action": "screenshot"
+    },
+    {
+      "name": "hinge_capture_end_source",
+      "action": "source"
+    },
+    {
+      "name": "hinge_dump_end_strings",
+      "action": "dump_strings",
+      "limit": 80
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "name": "saul_v1",
+  "swipe_policy": {
+    "min_quality_score_like": 72,
+    "require_flags_all": [
+      "selfie_verified"
+    ],
+    "block_prompt_keywords": [
+      "crypto",
+      "smoking"
+    ],
+    "max_likes": 25,
+    "max_passes": 120
+  },
+  "message_policy": {
+    "enabled": true,
+    "min_quality_score_to_message": 85,
+    "max_messages": 5,
+    "template": "Hey {{name}}, your profile stood out. What's something you're excited about this week?"
+  },
+  "llm_criteria": {
+    "summary": "Prefer thoughtful, active profiles with strong prompts and clear intent.",
+    "hard_no": [
+      "explicit hostile or abusive content"
+    ],
+    "soft_plus": [
+      "creative prompt answers",
+      "active today",
+      "voice prompt"
+    ]
+  }
+}

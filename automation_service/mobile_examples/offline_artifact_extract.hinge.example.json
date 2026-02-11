@@ -1,0 +1,13 @@
+{
+  "artifacts_dir": "artifacts",
+  "xml_glob": "hinge*.xml",
+  "app": "hinge",
+  "output_dir": "artifacts/offline_exports",
+  "output_prefix": "hinge_dataset",
+  "max_files": 500,
+  "max_nodes_per_screen": 3000,
+  "include_node_rows": true,
+  "package_allowlist": [
+    "co.hinge.app"
+  ]
+}

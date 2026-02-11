@@ -1,0 +1,209 @@
+{
+  "scenarios": [
+    {
+      "name": "dryrun_explore",
+      "overrides": {
+        "command_query": "Explore freely for 12 actions. Dry run.",
+        "dry_run": true,
+        "max_actions": 12,
+        "capture_each_action": false
+      },
+      "assertions": {
+        "min_unique_actions": 1,
+        "max_repeat_action_streak": 12
+      }
+    },
+    {
+      "name": "live_swipe_low_threshold",
+      "overrides": {
+        "command_query": "Live run for 10 actions, quality above 55, max likes 4, max passes 8.",
+        "dry_run": false,
+        "max_actions": 10,
+        "capture_each_action": false
+      },
+      "assertions": {
+        "max_validation_failed": 1,
+        "min_unique_actions": 2,
+        "expect_actions_any": [
+          "like",
+          "pass"
+        ]
+      }
+    },
+    {
+      "name": "live_explore_short",
+      "overrides": {
+        "command_query": "Explore freely for 10 actions. Live run.",
+        "dry_run": false,
+        "max_actions": 10,
+        "capture_each_action": false
+      },
+      "assertions": {
+        "max_validation_failed": 2,
+        "min_unique_actions": 2,
+        "expect_actions_any": [
+          "goto_matches",
+          "goto_discover",
+          "like",
+          "pass",
+          "back"
+        ]
+      }
+    },
+    {
+      "name": "live_message_goal",
+      "overrides": {
+        "command_query": "Message for 8 actions. Go to matches first. Live run.",
+        "dry_run": false,
+        "max_actions": 8,
+        "capture_each_action": false
+      },
+      "assertions": {
+        "max_validation_failed": 2,
+        "expect_actions_any": [
+          "goto_matches",
+          "open_thread",
+          "send_message",
+          "back"
+        ]
+      }
+    },
+    {
+      "name": "live_force_goto_matches",
+      "overrides": {
+        "command_query": "Go to matches. Live run for 4 actions.",
+        "dry_run": false,
+        "max_actions": 4,
+        "capture_each_action": false
+      },
+      "assertions": {
+        "expect_actions_any": [
+          "goto_matches"
+        ]
+      }
+    },
+    {
+      "name": "live_force_goto_discover",
+      "overrides": {
+        "command_query": "Go to discover. Live run for 4 actions.",
+        "dry_run": false,
+        "max_actions": 4,
+        "capture_each_action": false
+      },
+      "assertions": {
+        "expect_actions_any": [
+          "goto_discover"
+        ]
+      }
+    },
+    {
+      "name": "live_force_goto_profile",
+      "overrides": {
+        "command_query": "Go to profile. Live run for 4 actions.",
+        "dry_run": false,
+        "max_actions": 4,
+        "capture_each_action": false
+      },
+      "assertions": {
+        "expect_actions_any": [
+          "goto_profile_hub"
+        ]
+      }
+    },
+    {
+      "name": "live_force_goto_likes_you",
+      "overrides": {
+        "command_query": "Go to likes you. Live run for 4 actions.",
+        "dry_run": false,
+        "max_actions": 4,
+        "capture_each_action": false
+      },
+      "assertions": {
+        "expect_actions_any": [
+          "goto_likes_you"
+        ]
+      }
+    },
+    {
+      "name": "live_force_goto_standouts",
+      "overrides": {
+        "command_query": "Go to standouts. Live run for 4 actions.",
+        "dry_run": false,
+        "max_actions": 4,
+        "capture_each_action": false
+      },
+      "assertions": {
+        "expect_actions_any": [
+          "goto_standouts"
+        ]
+      }
+    },
+    {
+      "name": "live_force_open_thread",
+      "overrides": {
+        "command_query": "Open thread now. Message for 6 actions. Live run.",
+        "dry_run": false,
+        "max_actions": 6,
+        "capture_each_action": false
+      },
+      "assertions": {
+        "max_validation_failed": 2,
+        "expect_actions_any": [
+          "open_thread",
+          "goto_matches"
+        ]
+      }
+    },
+    {
+      "name": "live_force_pass",
+      "overrides": {
+        "command_query": "Pass now. Live run for 5 actions.",
+        "dry_run": false,
+        "max_actions": 5,
+        "capture_each_action": false
+      },
+      "assertions": {
+        "expect_actions_any": [
+          "pass"
+        ]
+      }
+    },
+    {
+      "name": "dry_force_wait",
+      "overrides": {
+        "command_query": "Force wait for 3 actions. Dry run.",
+        "dry_run": true,
+        "max_actions": 3,
+        "capture_each_action": false
+      },
+      "assertions": {
+        "expect_actions_any": [
+          "wait"
+        ]
+      }
+    },
+    {
+      "name": "llm_fallback_dry",
+      "overrides": {
+        "command_query": "Message oriented run for 8 actions. Dry run.",
+        "dry_run": true,
+        "max_actions": 8,
+        "decision_engine": {
+          "type": "llm",
+          "llm_failure_mode": "fallback_deterministic",
+          "llm": {
+            "model": "gpt-4.1-mini",
+            "temperature": 0.1,
+            "timeout_s": 20,
+            "api_key_env": "OPENAI_API_KEY",
+            "base_url": "https://api.openai.com"
+          }
+        },
+        "capture_each_action": false
+      },
+      "assertions": {
+        "min_unique_actions": 1
+      }
+    }
+  ]
+}

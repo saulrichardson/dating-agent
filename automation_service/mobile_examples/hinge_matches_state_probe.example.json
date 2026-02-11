@@ -1,0 +1,92 @@
+{
+  "appium_server_url": "http://127.0.0.1:4723",
+  "capabilities_json_path": "automation_service/mobile_examples/android_capabilities.example.json",
+  "artifacts_dir": "artifacts",
+  "pause_before_start": false,
+  "default_retry": {
+    "attempts": 2,
+    "sleep_s": 0.4
+  },
+  "steps": [
+    {
+      "name": "hinge_wait_for_matches_tab",
+      "action": "wait_for_any",
+      "locators": [
+        {
+          "using": "accessibility id",
+          "value": "Matches"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Matches\")"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().textContains(\"Matches\")"
+        }
+      ],
+      "timeout_s": 15,
+      "poll_s": 0.5
+    },
+    {
+      "name": "hinge_open_matches_tab",
+      "action": "click_any",
+      "locators": [
+        {
+          "using": "accessibility id",
+          "value": "Matches"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Matches\")"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().textContains(\"Matches\")"
+        }
+      ]
+    },
+    {
+      "name": "hinge_pause_after_open_matches",
+      "action": "sleep",
+      "seconds": 1.2
+    },
+    {
+      "name": "hinge_capture_matches_screen",
+      "action": "screenshot"
+    },
+    {
+      "name": "hinge_capture_matches_source",
+      "action": "source"
+    },
+    {
+      "name": "hinge_assert_no_matches_banner_or_list",
+      "action": "wait_for_any",
+      "locators": [
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().textContains(\"no matches yet\")"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().textContains(\"When a like is mutual\")"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().descriptionContains(\"Send\")"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().textContains(\"Send\")"
+        }
+      ],
+      "timeout_s": 8,
+      "poll_s": 0.5
+    },
+    {
+      "name": "hinge_dump_matches_strings",
+      "action": "dump_strings",
+      "limit": 160
+    }
+  ]
+}

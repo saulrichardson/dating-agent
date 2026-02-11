@@ -1,0 +1,65 @@
+{
+  "appium_server_url": "http://127.0.0.1:4723",
+  "capabilities_json_path": "automation_service/mobile_examples/android_capabilities.example.json",
+  "artifacts_dir": "artifacts/full_fidelity_hinge",
+  "session_name": "hinge_full_fidelity",
+  "pause_before_start": true,
+  "max_iterations": 60,
+  "loop_sleep_s": 1.0,
+  "capture_screenshots": true,
+  "capture_xml_artifacts": true,
+  "max_nodes_per_frame": 3500,
+  "max_accessible_strings": 2500,
+  "target_package": "co.hinge.app",
+  "navigation": {
+    "mode": "observe",
+    "poll_every_iterations": 3,
+    "execute": false
+  },
+  "locators": {
+    "matches_tab": [
+      {
+        "using": "accessibility id",
+        "value": "Matches"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Matches\")"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Matches\")"
+      }
+    ],
+    "discover_tab": [
+      {
+        "using": "accessibility id",
+        "value": "Discover"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Discover\")"
+      }
+    ],
+    "open_thread": [
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Send\")"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Send\")"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Message\")"
+      }
+    ],
+    "back": [
+      {
+        "using": "accessibility id",
+        "value": "Back"
+      }
+    ]
+  }
+}

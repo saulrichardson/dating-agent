@@ -236,6 +236,112 @@ class AppiumHTTPClient:
             elements.append(WebDriverElementRef(element_id=_extract_element_id(item)))
         return elements
 
+    def perform_actions(self, actions: list[dict[str, Any]]) -> None:
+        """
+        Perform W3C input actions.
+
+        This is the standard way to do coordinate-based touch input (tap/swipe)
+        without relying on Appium-specific legacy endpoints.
+        """
+        self._require_session()
+        if not actions or not isinstance(actions, list):
+            raise ValueError("actions must be a non-empty list")
+
+        self._request(
+            "POST",
+            f"/session/{self.session_id}/actions",
+            json={"actions": actions},
+        )
+
+    def release_actions(self) -> None:
+        """
+        Release any active input actions (W3C).
+
+        Not strictly required for single-shot interactions, but keeps the
+        session clean when doing repeated actions.
+        """
+        self._require_session()
+        self._request("DELETE", f"/session/{self.session_id}/actions")
+
+    def tap(self, *, x: int, y: int) -> None:
+        """
+        Tap at viewport coordinates (x, y) using W3C touch actions.
+        """
+        self._require_session()
+        if x is None or y is None:
+            raise ValueError("x and y are required")
+
+        actions = [
+            {
+                "type": "pointer",
+                "id": "finger1",
+                "parameters": {"pointerType": "touch"},
+                "actions": [
+                    {"type": "pointerMove", "duration": 0, "x": int(x), "y": int(y), "origin": "viewport"},
+                    {"type": "pointerDown", "button": 0},
+                    {"type": "pause", "duration": 50},
+                    {"type": "pointerUp", "button": 0},
+                ],
+            }
+        ]
+
+        try:
+            self.perform_actions(actions)
+        finally:
+            # Some servers error on release if they consider it a no-op; ignore.
+            try:
+                self.release_actions()
+            except Exception:
+                pass
+
+    def swipe(
+        self,
+        *,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        duration_ms: int = 600,
+    ) -> None:
+        """
+        Swipe from (x1, y1) to (x2, y2) over `duration_ms` milliseconds.
+        """
+        self._require_session()
+        for name, v in (("x1", x1), ("y1", y1), ("x2", x2), ("y2", y2)):
+            if v is None:
+                raise ValueError(f"{name} is required")
+        if duration_ms <= 0:
+            raise ValueError("duration_ms must be > 0")
+
+        actions = [
+            {
+                "type": "pointer",
+                "id": "finger1",
+                "parameters": {"pointerType": "touch"},
+                "actions": [
+                    {"type": "pointerMove", "duration": 0, "x": int(x1), "y": int(y1), "origin": "viewport"},
+                    {"type": "pointerDown", "button": 0},
+                    {"type": "pause", "duration": 100},
+                    {
+                        "type": "pointerMove",
+                        "duration": int(duration_ms),
+                        "x": int(x2),
+                        "y": int(y2),
+                        "origin": "viewport",
+                    },
+                    {"type": "pointerUp", "button": 0},
+                ],
+            }
+        ]
+
+        try:
+            self.perform_actions(actions)
+        finally:
+            try:
+                self.release_actions()
+            except Exception:
+                pass
+
     def get_element_text(self, element: WebDriverElementRef) -> str:
         self._require_session()
         response = self._request("GET", f"/session/{self.session_id}/element/{element.element_id}/text")
@@ -285,7 +391,27 @@ class AppiumHTTPClient:
             json={"text": text, "value": list(text)},
         )
 
+    def press_keycode(self, *, keycode: int, metastate: Optional[int] = None) -> None:
+        """
+        Press an Android keycode via Appium extension endpoint.
+
+        Common values:
+        - 4: Back
+        - 3: Home
+        - 66: Enter
+        """
+        self._require_session()
+        if keycode is None:
+            raise ValueError("keycode is required")
+        payload: dict[str, Any] = {"keycode": int(keycode)}
+        if metastate is not None:
+            payload["metastate"] = int(metastate)
+        self._request(
+            "POST",
+            f"/session/{self.session_id}/appium/device/press_keycode",
+            json=payload,
+        )
+
     def _require_session(self) -> None:
         if not self.session_id:
             raise RuntimeError("No active Appium session. Call create_session() first.")
-
