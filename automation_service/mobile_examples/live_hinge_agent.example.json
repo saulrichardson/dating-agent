@@ -1,0 +1,153 @@
+{
+  "appium_server_url": "http://127.0.0.1:4723",
+  "capabilities_json_path": "automation_service/mobile_examples/android_capabilities.example.json",
+  "profile_json_path": "automation_service/mobile_examples/hinge_agent_profile.example.json",
+
+  "command_query": "Swipe for 20 actions and message high quality matches. Dry run.",
+  "decision_engine": {
+    "type": "deterministic"
+  },
+
+  "artifacts_dir": "artifacts/live_hinge",
+  "pause_before_start": false,
+  "dry_run": true,
+  "max_runtime_s": 300,
+  "max_actions": 20,
+  "loop_sleep_s": 1.0,
+  "capture_each_action": true,
+  "validation": {
+    "enabled": true,
+    "post_action_sleep_s": 0.8,
+    "require_screen_change_for": [
+      "like",
+      "pass",
+      "open_thread",
+      "send_message",
+      "back"
+    ],
+    "max_consecutive_failures": 4
+  },
+
+  "locators": {
+    "discover_tab": [
+      {
+        "using": "accessibility id",
+        "value": "Discover"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Discover\")"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Discover\")"
+      }
+    ],
+    "matches_tab": [
+      {
+        "using": "accessibility id",
+        "value": "Matches"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Matches\")"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Matches\")"
+      }
+    ],
+    "likes_you_tab": [
+      {
+        "using": "accessibility id",
+        "value": "Likes You"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Likes You\")"
+      }
+    ],
+    "standouts_tab": [
+      {
+        "using": "accessibility id",
+        "value": "Standouts"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Standouts\")"
+      }
+    ],
+    "profile_hub_tab": [
+      {
+        "using": "accessibility id",
+        "value": "Profile Hub"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Profile Hub\")"
+      }
+    ],
+    "like": [
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Like\")"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Like\")"
+      }
+    ],
+    "pass": [
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Skip\")"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Skip\")"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Pass\")"
+      }
+    ],
+    "open_thread": [
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Send\")"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Send\")"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Message\")"
+      }
+    ],
+    "message_input": [
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Type a message\")"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Type a message\")"
+      }
+    ],
+    "send": [
+      {
+        "using": "accessibility id",
+        "value": "Send"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Send\")"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Send\")"
+      }
+    ]
+  }
+}

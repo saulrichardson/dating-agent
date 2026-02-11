@@ -1,0 +1,70 @@
+{
+  "appium_server_url": "http://127.0.0.1:4723",
+  "capabilities_json_path": "automation_service/mobile_examples/android_capabilities.example.json",
+  "artifacts_dir": "artifacts",
+  "pause_before_start": true,
+  "vars": {
+    "draft_reply": "Hey there"
+  },
+  "default_retry": {
+    "attempts": 2,
+    "sleep_s": 0.4
+  },
+  "steps": [
+    {
+      "name": "Capture baseline screen",
+      "action": "screenshot"
+    },
+    {
+      "name": "Capture baseline UI XML",
+      "action": "source"
+    },
+    {
+      "name": "Try to open inbox/messages area",
+      "action": "click_any",
+      "locators": [
+        {
+          "using": "accessibility id",
+          "value": "Messages"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().textContains(\"Messages\")"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().textContains(\"Matches\")"
+        }
+      ],
+      "retry": {
+        "attempts": 1,
+        "sleep_s": 0.0
+      }
+    },
+    {
+      "name": "Wait for send affordance or input field",
+      "action": "wait_for_any",
+      "locators": [
+        {
+          "using": "accessibility id",
+          "value": "Send"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().textContains(\"Send\")"
+        },
+        {
+          "using": "-android uiautomator",
+          "value": "new UiSelector().textContains(\"Type a message\")"
+        }
+      ],
+      "timeout_s": 8,
+      "poll_s": 0.5
+    },
+    {
+      "name": "Dump accessible strings for debugging",
+      "action": "dump_strings",
+      "limit": 120
+    }
+  ]
+}

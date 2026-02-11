@@ -1,0 +1,117 @@
+{
+  "appium_server_url": "http://127.0.0.1:4723",
+  "capabilities_json_path": "automation_service/mobile_examples/android_capabilities.example.json",
+  "profile_json_path": "automation_service/mobile_examples/hinge_agent_profile.example.json",
+
+  "command_query": "Message-oriented run for 10 actions. Go to matches first and send thoughtful first messages when appropriate.",
+  "decision_engine": {
+    "type": "llm",
+    "llm_failure_mode": "fallback_deterministic",
+    "llm": {
+      "model": "gpt-4.1-mini",
+      "temperature": 0.1,
+      "timeout_s": 30,
+      "api_key_env": "OPENAI_API_KEY",
+      "base_url": "https://api.openai.com"
+    }
+  },
+
+  "artifacts_dir": "artifacts/live_hinge_llm",
+  "pause_before_start": false,
+  "dry_run": true,
+  "max_runtime_s": 300,
+  "max_actions": 10,
+  "loop_sleep_s": 1.0,
+  "capture_each_action": true,
+  "validation": {
+    "enabled": true,
+    "post_action_sleep_s": 0.8,
+    "require_screen_change_for": [
+      "like",
+      "pass",
+      "open_thread",
+      "send_message",
+      "back"
+    ],
+    "max_consecutive_failures": 4
+  },
+
+  "locators": {
+    "discover_tab": [
+      {
+        "using": "accessibility id",
+        "value": "Discover"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Discover\")"
+      }
+    ],
+    "matches_tab": [
+      {
+        "using": "accessibility id",
+        "value": "Matches"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Matches\")"
+      }
+    ],
+    "likes_you_tab": [
+      {
+        "using": "accessibility id",
+        "value": "Likes You"
+      }
+    ],
+    "standouts_tab": [
+      {
+        "using": "accessibility id",
+        "value": "Standouts"
+      }
+    ],
+    "profile_hub_tab": [
+      {
+        "using": "accessibility id",
+        "value": "Profile Hub"
+      }
+    ],
+    "like": [
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Like\")"
+      }
+    ],
+    "pass": [
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Skip\")"
+      }
+    ],
+    "open_thread": [
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Send\")"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Message\")"
+      }
+    ],
+    "message_input": [
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Type a message\")"
+      }
+    ],
+    "send": [
+      {
+        "using": "accessibility id",
+        "value": "Send"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Send\")"
+      }
+    ]
+  }
+}

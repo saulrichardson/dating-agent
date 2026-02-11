@@ -1,0 +1,31 @@
+{
+  "appium_server_url": "http://127.0.0.1:4723",
+  "capabilities_json_path": "automation_service/mobile_examples/android_capabilities.example.json",
+  "artifacts_dir": "artifacts",
+  "pause_before_start": true,
+  "commands": [
+    "# This is an example script for the mobile console runner.",
+    "#",
+    "# How to use:",
+    "# 1) Start an Android emulator and sign into the Play Store (for apps like Hinge).",
+    "# 2) Start Appium (UiAutomator2 driver installed).",
+    "# 3) In the concierge repo: source venv/bin/activate && python -m automation_service.cli",
+    "# 4) Choose option 8 and point it at this file.",
+    "",
+    "screenshot start",
+    "source start",
+    "dump 80",
+    "",
+    "# Example workflow once you discover locators:",
+    "# click \"accessibility id\" \"Messages\" 0",
+    "# sleep 1",
+    "# source after_opening_messages",
+    "# search \"send\" 20",
+    "",
+    "# If you want a safe guardrail when sending messages:",
+    "# confirm \"About to send a message, continue?\"",
+    "# type \"id\" \"com.example.app:id/message_input\" \"hello!\"",
+    "# click \"accessibility id\" \"Send\" 0"
+  ]
+}
+

@@ -1,0 +1,9 @@
+{
+  "appium_server_url": "http://127.0.0.1:4723",
+  "capabilities_json_path": "automation_service/mobile_examples/android_capabilities.example.json",
+  "app": "tinder",
+  "artifacts_dir": "artifacts",
+  "pause_before_start": true,
+  "post_click_sleep_s": 1.0,
+  "max_keyword_hits": 50
+}

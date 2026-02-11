@@ -1,0 +1,10 @@
+{
+  "artifacts_dir": "artifacts",
+  "xml_glob": "*.xml",
+  "app": "auto",
+  "output_dir": "artifacts/offline_exports",
+  "output_prefix": "mobile_dataset",
+  "max_files": 500,
+  "max_nodes_per_screen": 3000,
+  "include_node_rows": false
+}
