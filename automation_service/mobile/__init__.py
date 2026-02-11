@@ -24,6 +24,7 @@ from .offline_artifacts import (
 from .live_hinge_agent import (
     run_live_hinge_agent,
     get_hinge_action_catalog,
+    HingePersonaSpec,
     LiveHingeAgentResult,
     LiveHingeAgentError,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "OfflineArtifactExtractionError",
     "run_live_hinge_agent",
     "get_hinge_action_catalog",
+    "HingePersonaSpec",
     "LiveHingeAgentResult",
     "LiveHingeAgentError",
     "run_hinge_full_fidelity_capture",

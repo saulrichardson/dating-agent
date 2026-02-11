@@ -45,3 +45,41 @@ Use `validation` in live config to harden autonomous execution:
   }
 }
 ```
+
+## LLM + Screenshot Packet Controls
+
+For the autonomous swipe/message flow, enable screenshot-conditioned LLM decisions:
+
+```json
+{
+  "decision_engine": {
+    "type": "llm",
+    "llm_failure_mode": "fallback_deterministic",
+    "llm": {
+      "model": "gpt-4.1-mini",
+      "include_screenshot": true,
+      "image_detail": "auto",
+      "max_observed_strings": 120
+    }
+  },
+  "persist_packet_log": true,
+  "packet_capture_screenshot": true,
+  "packet_capture_xml": false
+}
+```
+
+This writes packet rows with decision + quality features + screenshot path, which can feed downstream ranking or QA pipelines.
+
+## Personality Spec
+
+Use `persona_spec` in profile JSON to shape action + opener behavior:
+
+- `archetype`, `intent`, `tone_traits`
+- `hard_boundaries`, `preferred_signals`, `avoid_signals`
+- `opener_strategy`, `examples`
+- `max_message_chars`, `require_question`
+
+See:
+- `hinge_agent_profile.example.json`
+- `hinge_agent_profile.creative_playful.example.json`
+- `hinge_agent_profile.direct_intentional.example.json`

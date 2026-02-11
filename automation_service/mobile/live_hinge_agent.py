@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -45,8 +46,23 @@ class HingeMessagePolicy:
 
 
 @dataclass(frozen=True)
+class HingePersonaSpec:
+    archetype: str
+    intent: str
+    tone_traits: list[str]
+    hard_boundaries: list[str]
+    preferred_signals: list[str]
+    avoid_signals: list[str]
+    opener_strategy: str
+    examples: list[str]
+    max_message_chars: int
+    require_question: bool
+
+
+@dataclass(frozen=True)
 class HingeAgentProfile:
     name: str
+    persona_spec: HingePersonaSpec
     swipe_policy: HingeSwipePolicy
     message_policy: HingeMessagePolicy
     llm_criteria: dict[str, Any]
@@ -60,6 +76,9 @@ class DecisionEngineConfig:
     llm_timeout_s: float
     llm_api_key_env: str
     llm_base_url: str
+    llm_include_screenshot: bool
+    llm_image_detail: str
+    llm_max_observed_strings: int
     llm_failure_mode: str
 
 
@@ -79,6 +98,7 @@ class LiveHingeAgentResult:
     passes: int
     messages: int
     action_log_path: Path
+    packet_log_path: Optional[Path]
     artifacts: list[Path]
 
 
@@ -183,6 +203,33 @@ def _as_non_negative_float(value: Any, *, field: str, context: str) -> float:
     if parsed < 0:
         raise LiveHingeAgentError(f"{context}: '{field}' must be >= 0")
     return parsed
+
+
+def _as_list_of_non_empty_str(
+    value: Any,
+    *,
+    field: str,
+    context: str,
+    default: Optional[list[str]] = None,
+) -> list[str]:
+    if value is None:
+        return list(default or [])
+    if not isinstance(value, list):
+        raise LiveHingeAgentError(f"{context}: '{field}' must be a list of non-empty strings")
+    out: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise LiveHingeAgentError(f"{context}: '{field}' must be a list of non-empty strings")
+        out.append(item.strip())
+    return out
+
+
+def _as_dict_or_empty(value: Any, *, field: str, context: str) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise LiveHingeAgentError(f"{context}: '{field}' must be an object when provided")
+    return {str(k): v for k, v in value.items()}
 
 
 def _parse_locator(raw: Any, *, context: str) -> Locator:
@@ -352,6 +399,39 @@ def _render_template(template: str, *, name: Optional[str]) -> str:
     return rendered
 
 
+def _normalize_message_text(
+    *,
+    raw_text: Optional[str],
+    profile: HingeAgentProfile,
+    quality_features: dict[str, Any],
+) -> str:
+    fallback = _render_template(
+        profile.message_policy.template,
+        name=quality_features.get("profile_name_candidate"),
+    )
+    text = (raw_text or "").strip()
+    if not text:
+        text = fallback
+
+    # Normalize whitespace and guard length so outbound messages remain concise.
+    text = " ".join(text.split())
+    max_chars = profile.persona_spec.max_message_chars
+    if len(text) > max_chars:
+        text = text[: max_chars - 1].rstrip() + "…"
+
+    if profile.persona_spec.require_question and "?" not in text:
+        suffix = " What's been your highlight this week?"
+        candidate = text + suffix
+        if len(candidate) <= max_chars:
+            text = candidate
+        else:
+            # Keep question requirement while respecting max length.
+            head = text[: max(0, max_chars - len(suffix) - 1)].rstrip()
+            text = (head + suffix).strip()
+
+    return text
+
+
 def _screen_fingerprint(*, screen_type: str, quality_features: dict[str, Any], strings: list[str]) -> str:
     key_parts = [
         screen_type,
@@ -368,16 +448,15 @@ def _load_profile(profile_json_path: str) -> HingeAgentProfile:
     context = profile_json_path
 
     name = _as_non_empty_str(raw.get("name") or "hinge_profile", field="name", context=context)
+    persona_raw = _as_dict_or_empty(raw.get("persona_spec"), field="persona_spec", context=context)
     swipe_raw = require_key(raw, "swipe_policy", context=context)
     message_raw = require_key(raw, "message_policy", context=context)
-    llm_criteria_raw = raw.get("llm_criteria", {})
+    llm_criteria_raw = _as_dict_or_empty(raw.get("llm_criteria"), field="llm_criteria", context=context)
 
     if not isinstance(swipe_raw, dict):
         raise LiveHingeAgentError(f"{context}: 'swipe_policy' must be an object")
     if not isinstance(message_raw, dict):
         raise LiveHingeAgentError(f"{context}: 'message_policy' must be an object")
-    if not isinstance(llm_criteria_raw, dict):
-        raise LiveHingeAgentError(f"{context}: 'llm_criteria' must be an object when provided")
 
     require_flags_all_raw = swipe_raw.get("require_flags_all", [])
     if not isinstance(require_flags_all_raw, list) or not all(
@@ -432,9 +511,84 @@ def _load_profile(profile_json_path: str) -> HingeAgentProfile:
         ),
     )
 
-    llm_criteria = {str(k): v for k, v in llm_criteria_raw.items()}
+    persona_spec = HingePersonaSpec(
+        archetype=_as_non_empty_str(
+            persona_raw.get("archetype") or "intentional_warm_connector",
+            field="archetype",
+            context=f"{context}: persona_spec",
+        ),
+        intent=_as_non_empty_str(
+            persona_raw.get("intent") or "Find emotionally available, high-intent matches for meaningful dating.",
+            field="intent",
+            context=f"{context}: persona_spec",
+        ),
+        tone_traits=_as_list_of_non_empty_str(
+            persona_raw.get("tone_traits"),
+            field="tone_traits",
+            context=f"{context}: persona_spec",
+            default=["warm", "curious", "grounded", "playful"],
+        ),
+        hard_boundaries=_as_list_of_non_empty_str(
+            persona_raw.get("hard_boundaries"),
+            field="hard_boundaries",
+            context=f"{context}: persona_spec",
+            default=[
+                "No sexual content in first message",
+                "No manipulative or negging language",
+                "No pressure to move off-app immediately",
+            ],
+        ),
+        preferred_signals=_as_list_of_non_empty_str(
+            persona_raw.get("preferred_signals"),
+            field="preferred_signals",
+            context=f"{context}: persona_spec",
+            default=[
+                "Specific prompt answers with personality",
+                "Evidence of emotional maturity",
+                "Signs of an active lifestyle",
+            ],
+        ),
+        avoid_signals=_as_list_of_non_empty_str(
+            persona_raw.get("avoid_signals"),
+            field="avoid_signals",
+            context=f"{context}: persona_spec",
+            default=[
+                "Profile hostility",
+                "Heavy cynicism",
+                "Low-effort one-word prompts",
+            ],
+        ),
+        opener_strategy=_as_non_empty_str(
+            persona_raw.get("opener_strategy")
+            or "Reference one concrete profile detail and end with one easy-to-answer question.",
+            field="opener_strategy",
+            context=f"{context}: persona_spec",
+        ),
+        examples=_as_list_of_non_empty_str(
+            persona_raw.get("examples"),
+            field="examples",
+            context=f"{context}: persona_spec",
+            default=[
+                "You mentioned learning salsa. What's been the hardest move to get right so far?",
+                "Your travel prompt made me laugh. What's your most controversial airport opinion?",
+            ],
+        ),
+        max_message_chars=_as_positive_int(
+            persona_raw.get("max_message_chars", 180),
+            field="max_message_chars",
+            context=f"{context}: persona_spec",
+        ),
+        require_question=bool(persona_raw.get("require_question", True)),
+    )
+    if persona_spec.max_message_chars > 500:
+        raise LiveHingeAgentError(
+            f"{context}: persona_spec.max_message_chars must be <= 500 for first-message safety"
+        )
+
+    llm_criteria = dict(llm_criteria_raw)
     return HingeAgentProfile(
         name=name,
+        persona_spec=persona_spec,
         swipe_policy=swipe_policy,
         message_policy=message_policy,
         llm_criteria=llm_criteria,
@@ -450,6 +604,9 @@ def _parse_decision_engine(raw: Any, *, context: str) -> DecisionEngineConfig:
             llm_timeout_s=30.0,
             llm_api_key_env="OPENAI_API_KEY",
             llm_base_url="https://api.openai.com",
+            llm_include_screenshot=True,
+            llm_image_detail="auto",
+            llm_max_observed_strings=120,
             llm_failure_mode="fail",
         )
     if not isinstance(raw, dict):
@@ -475,6 +632,10 @@ def _parse_decision_engine(raw: Any, *, context: str) -> DecisionEngineConfig:
     if llm_model is not None:
         llm_model = _as_non_empty_str(llm_model, field="model", context=f"{context}: decision_engine.llm")
 
+    llm_image_detail = str(llm_raw.get("image_detail") or "auto").strip().lower()
+    if llm_image_detail not in {"low", "high", "auto"}:
+        raise LiveHingeAgentError(f"{context}: decision_engine.llm.image_detail must be 'low', 'high', or 'auto'")
+
     return DecisionEngineConfig(
         type=engine_type,
         llm_model=llm_model,
@@ -482,6 +643,13 @@ def _parse_decision_engine(raw: Any, *, context: str) -> DecisionEngineConfig:
         llm_timeout_s=float(llm_raw.get("timeout_s", 30.0)),
         llm_api_key_env=str(llm_raw.get("api_key_env") or "OPENAI_API_KEY").strip(),
         llm_base_url=str(llm_raw.get("base_url") or "https://api.openai.com").strip().rstrip("/"),
+        llm_include_screenshot=bool(llm_raw.get("include_screenshot", True)),
+        llm_image_detail=llm_image_detail,
+        llm_max_observed_strings=_as_positive_int(
+            llm_raw.get("max_observed_strings", 120),
+            field="max_observed_strings",
+            context=f"{context}: decision_engine.llm",
+        ),
         llm_failure_mode=llm_failure_mode,
     )
 
@@ -631,6 +799,7 @@ def _apply_directive_overrides(
 
     profile = HingeAgentProfile(
         name=profile.name,
+        persona_spec=profile.persona_spec,
         swipe_policy=swipe,
         message_policy=message,
         llm_criteria=dict(profile.llm_criteria),
@@ -739,9 +908,13 @@ def _deterministic_decide(
 
         if profile.message_policy.enabled and state.messages < profile.message_policy.max_messages:
             if "send_message" in available:
-                text = _render_template(
-                    profile.message_policy.template,
-                    name=quality_features.get("profile_name_candidate"),
+                text = _normalize_message_text(
+                    raw_text=_render_template(
+                        profile.message_policy.template,
+                        name=quality_features.get("profile_name_candidate"),
+                    ),
+                    profile=profile,
+                    quality_features=quality_features,
                 )
                 return "send_message", "explore_message_opportunity", text
             if "open_thread" in available:
@@ -768,9 +941,13 @@ def _deterministic_decide(
                 return "goto_discover", "message_goal_no_matches_route_discover", None
             return "wait", "message_goal_no_matches_available", None
         if "send_message" in available and state.messages < profile.message_policy.max_messages:
-            text = _render_template(
-                profile.message_policy.template,
-                name=quality_features.get("profile_name_candidate"),
+            text = _normalize_message_text(
+                raw_text=_render_template(
+                    profile.message_policy.template,
+                    name=quality_features.get("profile_name_candidate"),
+                ),
+                profile=profile,
+                quality_features=quality_features,
             )
             return "send_message", "message_goal_chat_surface", text
         if "open_thread" in available:
@@ -820,9 +997,13 @@ def _deterministic_decide(
             and "send_message" in available
             and score >= profile.message_policy.min_quality_score_to_message
         ):
-            text = _render_template(
-                profile.message_policy.template,
-                name=quality_features.get("profile_name_candidate"),
+            text = _normalize_message_text(
+                raw_text=_render_template(
+                    profile.message_policy.template,
+                    name=quality_features.get("profile_name_candidate"),
+                ),
+                profile=profile,
+                quality_features=quality_features,
             )
             return "send_message", "chat_surface_profile_message_policy", text
         if "goto_discover" in available:
@@ -869,6 +1050,8 @@ def _llm_decide(
     packet: dict[str, Any],
     profile: HingeAgentProfile,
     decision_engine: DecisionEngineConfig,
+    nl_query: Optional[str],
+    screenshot_png_bytes: Optional[bytes],
 ) -> tuple[str, str, Optional[str]]:
     if not decision_engine.llm_model:
         raise LiveHingeAgentError("decision_engine.llm.model is required when type='llm'")
@@ -880,6 +1063,65 @@ def _llm_decide(
         )
 
     available_actions = packet["available_actions"]
+    packet_for_llm = dict(packet)
+    observed_strings = packet_for_llm.get("observed_strings", [])
+    if isinstance(observed_strings, list):
+        packet_for_llm["observed_strings"] = observed_strings[: decision_engine.llm_max_observed_strings]
+
+    user_payload = {
+        "available_actions": available_actions,
+        "action_catalog": get_hinge_action_catalog(),
+        "command_query": nl_query,
+        "profile": {
+            "name": profile.name,
+            "persona_spec": {
+                "archetype": profile.persona_spec.archetype,
+                "intent": profile.persona_spec.intent,
+                "tone_traits": profile.persona_spec.tone_traits,
+                "hard_boundaries": profile.persona_spec.hard_boundaries,
+                "preferred_signals": profile.persona_spec.preferred_signals,
+                "avoid_signals": profile.persona_spec.avoid_signals,
+                "opener_strategy": profile.persona_spec.opener_strategy,
+                "examples": profile.persona_spec.examples,
+                "max_message_chars": profile.persona_spec.max_message_chars,
+                "require_question": profile.persona_spec.require_question,
+            },
+            "swipe_policy": {
+                "min_quality_score_like": profile.swipe_policy.min_quality_score_like,
+                "require_flags_all": sorted(profile.swipe_policy.require_flags_all),
+                "block_prompt_keywords": profile.swipe_policy.block_prompt_keywords,
+                "max_likes": profile.swipe_policy.max_likes,
+                "max_passes": profile.swipe_policy.max_passes,
+            },
+            "message_policy": {
+                "enabled": profile.message_policy.enabled,
+                "min_quality_score_to_message": profile.message_policy.min_quality_score_to_message,
+                "max_messages": profile.message_policy.max_messages,
+                "template": profile.message_policy.template,
+            },
+            "llm_criteria": profile.llm_criteria,
+        },
+        "packet": packet_for_llm,
+    }
+
+    user_content: list[dict[str, Any]] = [
+        {
+            "type": "text",
+            "text": json.dumps(user_payload, ensure_ascii=False),
+        }
+    ]
+    if screenshot_png_bytes is not None and decision_engine.llm_include_screenshot:
+        data_url = "data:image/png;base64," + base64.b64encode(screenshot_png_bytes).decode("ascii")
+        user_content.append(
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": data_url,
+                    "detail": decision_engine.llm_image_detail,
+                },
+            }
+        )
+
     payload = {
         "model": decision_engine.llm_model,
         "temperature": float(decision_engine.llm_temperature),
@@ -888,39 +1130,19 @@ def _llm_decide(
             {
                 "role": "system",
                 "content": (
-                    "You are a Hinge action selector. You must return strict JSON with keys: "
-                    "action (string), reason (string), message_text (string|null). "
-                    "Action must be one of available_actions. "
+                    "You are an autonomous Hinge action selector and first-message writer. "
+                    "Decide the safest next action for the current screen. "
+                    "Return strict JSON with keys: action (string), reason (string), message_text (string|null). "
+                    "Action must be exactly one of available_actions. "
+                    "Respect profile persona_spec and hard_boundaries. "
+                    "If action is send_message, provide concise message_text that follows opener_strategy "
+                    "and max_message_chars. If action is not send_message, message_text must be null. "
                     "Do not include any additional keys."
                 ),
             },
             {
                 "role": "user",
-                "content": json.dumps(
-                    {
-                        "available_actions": available_actions,
-                        "action_catalog": get_hinge_action_catalog(),
-                        "profile": {
-                            "name": profile.name,
-                            "swipe_policy": {
-                                "min_quality_score_like": profile.swipe_policy.min_quality_score_like,
-                                "require_flags_all": sorted(profile.swipe_policy.require_flags_all),
-                                "block_prompt_keywords": profile.swipe_policy.block_prompt_keywords,
-                                "max_likes": profile.swipe_policy.max_likes,
-                                "max_passes": profile.swipe_policy.max_passes,
-                            },
-                            "message_policy": {
-                                "enabled": profile.message_policy.enabled,
-                                "min_quality_score_to_message": profile.message_policy.min_quality_score_to_message,
-                                "max_messages": profile.message_policy.max_messages,
-                                "template": profile.message_policy.template,
-                            },
-                            "llm_criteria": profile.llm_criteria,
-                        },
-                        "packet": packet,
-                    },
-                    ensure_ascii=False,
-                ),
+                "content": user_content,
             },
         ],
     }
@@ -968,6 +1190,16 @@ def _llm_decide(
             f"LLM selected unavailable action {action!r}. available_actions={available_actions}"
         )
 
+    if action == "send_message":
+        message_text = _normalize_message_text(
+            raw_text=message_text,
+            profile=profile,
+            quality_features=packet.get("quality_features") or {},
+        )
+    elif message_text is not None:
+        # Keep the log shape deterministic for non-message actions.
+        message_text = None
+
     return action, reason, message_text
 
 
@@ -989,7 +1221,10 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
             "temperature": 0.1,
             "timeout_s": 30,
             "api_key_env": "OPENAI_API_KEY",
-            "base_url": "https://api.openai.com"
+            "base_url": "https://api.openai.com",
+            "include_screenshot": true,
+            "image_detail": "auto",
+            "max_observed_strings": 120
           }
         },
         "artifacts_dir": "artifacts/live_hinge",
@@ -999,6 +1234,9 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
         "max_actions": 30,
         "loop_sleep_s": 1.0,
         "capture_each_action": true,
+        "persist_packet_log": true,
+        "packet_capture_screenshot": true,
+        "packet_capture_xml": false,
         "validation": {
           "enabled": true,
           "post_action_sleep_s": 0.8,
@@ -1067,6 +1305,14 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
     max_actions = _as_positive_int(config.get("max_actions", 30), field="max_actions", context=context)
     loop_sleep_s = _as_non_negative_float(config.get("loop_sleep_s", 1.0), field="loop_sleep_s", context=context)
     capture_each_action = bool(config.get("capture_each_action", True))
+    persist_packet_log = bool(config.get("persist_packet_log", True))
+    packet_capture_screenshot = bool(
+        config.get(
+            "packet_capture_screenshot",
+            decision_engine.type == "llm" and decision_engine.llm_include_screenshot,
+        )
+    )
+    packet_capture_xml = bool(config.get("packet_capture_xml", False))
     validation_raw = config.get("validation", {})
     if validation_raw is None:
         validation_raw = {}
@@ -1112,6 +1358,11 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
     session_id = client.create_session(capabilities_payload)
     started = time.time()
     state = _RuntimeState()
+    packet_log_path: Optional[Path] = None
+    packet_log_fh = None
+    packet_artifacts_dir = artifacts_dir / "decision_packets"
+    if packet_capture_screenshot or packet_capture_xml or persist_packet_log:
+        _ensure_dir(packet_artifacts_dir)
 
     action_to_locator_key: dict[str, str] = {
         "goto_discover": "discover_tab",
@@ -1137,6 +1388,9 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
         print(f"Dry run: {dry_run}")
         if pause_before_start:
             input("Session started. Open Hinge in emulator and press Enter to start live loop...")
+        if persist_packet_log:
+            packet_log_path = _artifact_path(artifacts_dir=artifacts_dir, stem="hinge_live_packet_log", ext="jsonl")
+            packet_log_fh = packet_log_path.open("w", encoding="utf-8")
 
         while state.iterations < max_actions and (time.time() - started) <= max_runtime_s:
             state.iterations += 1
@@ -1144,6 +1398,21 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
             step_ts = datetime.now().isoformat()
 
             xml = client.get_page_source()
+            packet_xml_path: Optional[Path] = None
+            if packet_capture_xml:
+                packet_xml_path = packet_artifacts_dir / f"packet_{iteration_idx:04d}.xml"
+                packet_xml_path.write_text(xml, encoding="utf-8")
+                state.artifacts.append(packet_xml_path)
+
+            llm_screenshot_png_bytes: Optional[bytes] = None
+            packet_screenshot_path: Optional[Path] = None
+            if packet_capture_screenshot or (decision_engine.type == "llm" and decision_engine.llm_include_screenshot):
+                llm_screenshot_png_bytes = client.get_screenshot_png_bytes()
+                if packet_capture_screenshot:
+                    packet_screenshot_path = packet_artifacts_dir / f"packet_{iteration_idx:04d}.png"
+                    packet_screenshot_path.write_bytes(llm_screenshot_png_bytes)
+                    state.artifacts.append(packet_screenshot_path)
+
             package_name = _extract_package_name(xml)
             strings = extract_accessible_strings(xml, limit=2500)
             screen_type = _classify_hinge_screen(strings)
@@ -1163,8 +1432,12 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                     "screen_type": screen_type,
                     "decision": "wait",
                     "reason": "not_in_hinge_package",
+                    "packet_screenshot_path": None if packet_screenshot_path is None else str(packet_screenshot_path),
+                    "packet_xml_path": None if packet_xml_path is None else str(packet_xml_path),
                 }
                 state.action_log.append(event)
+                if packet_log_fh is not None:
+                    packet_log_fh.write(json.dumps(event, ensure_ascii=False) + "\n")
                 print(f"[{iteration_idx}] wait: package={package_name!r} (expect 'co.hinge.app')")
                 time.sleep(loop_sleep_s)
                 continue
@@ -1184,6 +1457,8 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                 "quality_features": quality_features,
                 "available_actions": available_actions,
                 "observed_strings": strings[:120],
+                "packet_screenshot_path": None if packet_screenshot_path is None else str(packet_screenshot_path),
+                "packet_xml_path": None if packet_xml_path is None else str(packet_xml_path),
                 "limits": {
                     "likes_remaining": max(profile.swipe_policy.max_likes - state.likes, 0),
                     "passes_remaining": max(profile.swipe_policy.max_passes - state.passes, 0),
@@ -1208,6 +1483,8 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                         packet=packet,
                         profile=profile,
                         decision_engine=decision_engine,
+                        nl_query=directive.query,
+                        screenshot_png_bytes=llm_screenshot_png_bytes,
                     )
                 except Exception as e:
                     if decision_engine.llm_failure_mode == "fallback_deterministic":
@@ -1242,11 +1519,11 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                 elif action == "send_message":
                     if state.messages >= profile.message_policy.max_messages:
                         raise LiveHingeAgentError("message limit reached")
-                    if not message_text:
-                        message_text = _render_template(
-                            profile.message_policy.template,
-                            name=quality_features.get("profile_name_candidate"),
-                        )
+                    message_text = _normalize_message_text(
+                        raw_text=message_text,
+                        profile=profile,
+                        quality_features=quality_features,
+                    )
                     if not dry_run:
                         input_locator, send_locator = _send_message(
                             client,
@@ -1326,6 +1603,8 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                 if matched_locator is None
                 else {"using": matched_locator.using, "value": matched_locator.value},
                 "message_text": message_text,
+                "packet_screenshot_path": None if packet_screenshot_path is None else str(packet_screenshot_path),
+                "packet_xml_path": None if packet_xml_path is None else str(packet_xml_path),
                 "validation_status": validation_status,
                 "validation_reason": validation_reason,
                 "pre_fingerprint": pre_fingerprint,
@@ -1334,6 +1613,8 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                 "consecutive_validation_failures": state.consecutive_validation_failures,
             }
             state.action_log.append(event)
+            if packet_log_fh is not None:
+                packet_log_fh.write(json.dumps(event, ensure_ascii=False) + "\n")
             state.last_action = action
             print(
                 f"[{iteration_idx}] {action} | screen={screen_type} score={score} "
@@ -1360,6 +1641,12 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
         log_path = _artifact_path(artifacts_dir=artifacts_dir, stem="hinge_live_action_log", ext="json")
         log_path.write_text(json.dumps(state.action_log, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"Wrote action log: {log_path}")
+        if packet_log_fh is not None:
+            packet_log_fh.flush()
+            packet_log_fh.close()
+            packet_log_fh = None
+        if packet_log_path is not None:
+            print(f"Wrote packet log: {packet_log_path}")
 
         return LiveHingeAgentResult(
             session_id=session_id,
@@ -1368,7 +1655,10 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
             passes=state.passes,
             messages=state.messages,
             action_log_path=log_path,
+            packet_log_path=packet_log_path,
             artifacts=state.artifacts,
         )
     finally:
+        if packet_log_fh is not None:
+            packet_log_fh.close()
         client.delete_session()

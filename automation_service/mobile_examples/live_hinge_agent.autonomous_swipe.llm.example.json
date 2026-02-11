@@ -1,29 +1,29 @@
 {
   "appium_server_url": "http://127.0.0.1:4723",
   "capabilities_json_path": "automation_service/mobile_examples/android_capabilities.example.json",
-  "profile_json_path": "automation_service/mobile_examples/hinge_agent_profile.direct_intentional.example.json",
+  "profile_json_path": "automation_service/mobile_examples/hinge_agent_profile.creative_playful.example.json",
 
-  "command_query": "Message-oriented run for 12 actions. Go to discover, then autonomously like or pass and send personalized openers for strong matches.",
+  "command_query": "Autonomous swipe and opener run for 25 actions. Prefer profiles with specific prompts. Send a personalized first message only when confidence is high.",
   "decision_engine": {
     "type": "llm",
     "llm_failure_mode": "fallback_deterministic",
     "llm": {
       "model": "gpt-4.1-mini",
-      "temperature": 0.1,
-      "timeout_s": 30,
+      "temperature": 0.2,
+      "timeout_s": 40,
       "api_key_env": "OPENAI_API_KEY",
       "base_url": "https://api.openai.com",
       "include_screenshot": true,
       "image_detail": "auto",
-      "max_observed_strings": 120
+      "max_observed_strings": 140
     }
   },
 
-  "artifacts_dir": "artifacts/live_hinge_llm",
+  "artifacts_dir": "artifacts/live_hinge_autonomous_swipe",
   "pause_before_start": false,
   "dry_run": true,
-  "max_runtime_s": 300,
-  "max_actions": 12,
+  "max_runtime_s": 600,
+  "max_actions": 25,
   "loop_sleep_s": 1.0,
   "capture_each_action": true,
   "persist_packet_log": true,
@@ -85,22 +85,30 @@
       {
         "using": "-android uiautomator",
         "value": "new UiSelector().descriptionContains(\"Like\")"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Like\")"
       }
     ],
     "pass": [
       {
         "using": "-android uiautomator",
         "value": "new UiSelector().descriptionContains(\"Skip\")"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Pass\")"
       }
     ],
     "open_thread": [
       {
         "using": "-android uiautomator",
-        "value": "new UiSelector().textContains(\"Send\")"
+        "value": "new UiSelector().textContains(\"Message\")"
       },
       {
         "using": "-android uiautomator",
-        "value": "new UiSelector().textContains(\"Message\")"
+        "value": "new UiSelector().textContains(\"Send\")"
       }
     ],
     "message_input": [

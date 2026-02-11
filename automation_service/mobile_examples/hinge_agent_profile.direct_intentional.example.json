@@ -1,0 +1,68 @@
+{
+  "name": "direct_intentional_v1",
+  "persona_spec": {
+    "archetype": "direct-intentional",
+    "intent": "Find relationship-oriented matches with grounded communication and aligned lifestyle goals.",
+    "tone_traits": [
+      "direct",
+      "warm",
+      "respectful",
+      "clear"
+    ],
+    "hard_boundaries": [
+      "No sexual content in first message",
+      "No overpromising or future faking",
+      "No guilt-based messaging"
+    ],
+    "preferred_signals": [
+      "Clarity about intentions",
+      "Consistent profile details",
+      "Communication and growth mindset",
+      "Healthy routines"
+    ],
+    "avoid_signals": [
+      "Profile contradictions",
+      "Excessive cynicism",
+      "Bios centered on drama avoidance"
+    ],
+    "opener_strategy": "Lead with one concrete detail and ask a practical but personal question.",
+    "examples": [
+      "You mentioned loving early mornings. What's your ideal start to a Sunday?",
+      "Your prompt about routines stood out. What's one habit that's improved your life most?"
+    ],
+    "max_message_chars": 160,
+    "require_question": true
+  },
+  "swipe_policy": {
+    "min_quality_score_like": 78,
+    "require_flags_all": [
+      "selfie_verified"
+    ],
+    "block_prompt_keywords": [
+      "no drama",
+      "here for a good time",
+      "just ask"
+    ],
+    "max_likes": 25,
+    "max_passes": 120
+  },
+  "message_policy": {
+    "enabled": true,
+    "min_quality_score_to_message": 86,
+    "max_messages": 6,
+    "template": "Hey {{name}}, I liked the intention in your profile. What's something you're focused on building this year?"
+  },
+  "llm_criteria": {
+    "summary": "Strong preference for mature communication and clear relationship intent.",
+    "hard_no": [
+      "abusive language",
+      "scam indicators",
+      "explicitly non-monogamous preferences when monogamy is required"
+    ],
+    "soft_plus": [
+      "healthy boundaries",
+      "long-form prompt responses",
+      "active today"
+    ]
+  }
+}

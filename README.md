@@ -175,9 +175,12 @@ Choose:
   - Hinge offline extraction config: `automation_service/mobile_examples/offline_artifact_extract.hinge.example.json`
   - Live Hinge agent config: `automation_service/mobile_examples/live_hinge_agent.example.json`
   - Live Hinge agent LLM config: `automation_service/mobile_examples/live_hinge_agent.llm.example.json`
+  - Live Hinge autonomous swipe + opener config: `automation_service/mobile_examples/live_hinge_agent.autonomous_swipe.llm.example.json`
   - Live Hinge stress suite config: `automation_service/mobile_examples/live_hinge_stress_suite.example.json`
   - Full-fidelity capture config: `automation_service/mobile_examples/hinge_full_fidelity_capture.example.json`
   - Hinge preference profile: `automation_service/mobile_examples/hinge_agent_profile.example.json`
+  - Hinge profile (creative/playful): `automation_service/mobile_examples/hinge_agent_profile.creative_playful.example.json`
+  - Hinge profile (direct/intentional): `automation_service/mobile_examples/hinge_agent_profile.direct_intentional.example.json`
   - Hinge tool catalog + NL examples: `automation_service/mobile_examples/hinge_agent_tools.md`
 
 Capabilities are loaded from JSON. A starter template is included at:
@@ -308,13 +311,27 @@ run_live_hinge_agent(
 PY
 ```
 
+Run full autonomous swipe + personalized opener mode (LLM + screenshot packet + rich persona):
+
+```bash
+source venv/bin/activate
+python - <<'PY'
+from automation_service.mobile.live_hinge_agent import run_live_hinge_agent
+run_live_hinge_agent(
+    config_json_path="automation_service/mobile_examples/live_hinge_agent.autonomous_swipe.llm.example.json"
+)
+PY
+```
+
 How decisions are made:
 - Build a live packet from the current screen (`screen_type`, extracted signals, available actions).
+- Optionally attach a decision screenshot from the same frame (`decision_engine.llm.include_screenshot=true`).
 - Apply a natural-language directive from `command_query` (for example: caps, message/swipe goal, one-shot navigation).
 - Evaluate action via `decision_engine.type`:
   - `deterministic`: rule + score policy.
-  - `llm`: model chooses one action from available action set, validated before execution.
+  - `llm`: model chooses one action from available action set and writes a first message when needed.
 - Execute action in the same session (no restart) and append to the action log JSON artifact.
+- Persist packet-level telemetry with optional screenshot/XML references (`persist_packet_log`, `packet_capture_screenshot`, `packet_capture_xml`).
 - Validate autonomous actions with post-action checks:
   - configurable `validation.require_screen_change_for`
   - stop on repeated failed transitions via `validation.max_consecutive_failures`
@@ -343,6 +360,29 @@ This writes a stress report under `artifacts/live_hinge_stress/` with:
 - `max_repeat_action_streak`
 - `expect_actions_any`, `expect_actions_all`
 - `expect_screens_any`, `expect_screens_all`
+
+### Hinge Agent MCP Server (Free-Form Agent Control)
+
+For coding agents that need free-form control over a live Hinge session, run:
+
+```bash
+./scripts/start-hinge-agent-mcp.sh
+```
+
+This server keeps one Appium session alive and exposes tools:
+- `start_session`: start from a `live_hinge_agent` config
+- `observe`: capture current packet (screen type, score, available actions)
+- `decide`: choose next action with deterministic or LLM mode
+- `execute`: execute a concrete action
+- `step`: one autonomous tick (`observe -> decide -> execute`)
+- `stop_session`: close session cleanly
+
+MCP entrypoint module:
+- `automation_service/mobile/hinge_agent_mcp.py`
+
+Reference docs:
+- `docs/hinge-mcp-tools.md`
+- `skills/hinge-autonomous-control/SKILL.md`
 
 ### Hinge Full-Fidelity Capture (Profile + Message Artifacts)
 
