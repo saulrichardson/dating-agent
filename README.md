@@ -2,6 +2,80 @@
 
 Dating app automation with persona extraction and context management services.
 
+## Architecture (High Level)
+
+This repo’s 0→1 focus is **mobile automation (Android + Appium)** for native apps like Hinge, with an artifact-first loop:
+
+- **Control plane**: run via CLI (`python -m automation_service.cli`) or the MCP server (`./scripts/start-hinge-agent-mcp.sh`).
+- **Execution plane**: a **single long-lived Appium session** controlling an Android emulator/device running Hinge.
+- **Data plane**: write **decision packets + screenshots + UI XML** every step so you can debug, evaluate, and build downstream scoring/review pipelines.
+
+### Component Diagram
+
+```mermaid
+flowchart LR
+  subgraph Host["Your Machine"]
+    CLI["CLI\nautomation_service/cli.py"]
+    MCP["MCP Server\nhinge_agent_mcp.py"]
+    Agent["Live Agent Loop\nlive_hinge_agent.py"]
+    Artifacts[("Artifacts\nartifacts/")]
+    Appium["Appium Server\n:4723"]
+    Device["Android Emulator/Device\nHinge App"]
+
+    CLI --> Agent
+    MCP --> Agent
+    Agent --> Artifacts
+    Agent -->|HTTP JSON| Appium
+    Appium -->|UiAutomator2| Device
+  end
+
+  Agent -. "optional LLM decision + vision" .-> LLM["OpenAI API"]
+  Artifacts --> Downstream["Offline pipelines\nranking / QA / review"]
+```
+
+### The Decision Loop (Per Iteration)
+
+```mermaid
+sequenceDiagram
+  participant Agent as Live Agent
+  participant Appium as Appium Server
+  participant Device as Android/Hinge
+  participant LLM as LLM (optional)
+  participant Disk as Artifacts
+
+  Agent->>Appium: GET /source + GET /screenshot
+  Appium->>Device: capture UI tree + screenshot
+  Device-->>Appium: XML + PNG
+  Appium-->>Agent: XML + PNG
+  Agent->>Agent: extract strings + classify screen + build packet
+  alt deterministic
+    Agent->>Agent: choose action via rules
+  else LLM
+    Agent->>LLM: packet (+ screenshot) -> JSON {action, message_text}
+    LLM-->>Agent: decision JSON
+  end
+  Agent->>Appium: execute action (tap/pass/like/message/back)
+  Agent->>Disk: append packet log + action log + save artifacts
+  Agent->>Appium: optional validation check (GET /source)
+```
+
+### Hinge-Specific Behavior
+
+- `send_message` on **Discover cards** follows the native sequence: `Like -> Add/Edit comment -> Send like`.
+- If Hinge shows the **"out of free likes"** paywall, the agent classifies it as `hinge_like_paywall` and attempts to back out (and will fail loudly if blocked).
+
+### Repository Map
+
+| Path | What it is |
+| --- | --- |
+| `automation_service/mobile/live_hinge_agent.py` | End-to-end autonomous loop (observe → decide → act → validate → log). |
+| `automation_service/mobile/appium_http_client.py` | Minimal Appium WebDriver client (tap/swipe/keys, screenshots, /source). |
+| `automation_service/mobile/android_accessibility.py` | Extract "accessible strings" from UI XML (used for screen classification + signals). |
+| `automation_service/mobile_examples/` | Example configs (capabilities, locators, personas, live runs). |
+| `automation_service/mobile/hinge_agent_mcp.py` | MCP server providing tool-based control for external coding agents. |
+| `scripts/start-hinge-agent-mcp.sh` | Start the MCP server (stdio). |
+| `artifacts/` | Outputs: packet logs, action logs, screenshots, full-fidelity captures. |
+
 ## Services
 
 This project includes three microservices:
@@ -75,12 +149,18 @@ python -m automation_service.cli
 ## Mobile Automation (Android + Appium)
 
 For apps that do **not** have a website (native-only), Playwright won’t work. The repo now includes
-a minimal Android/Appium path for local exploration and future native automation.
+a full-fidelity Android/Appium pipeline for native automation (single-session agent loop + artifact capture).
 
 ### What’s implemented today
 
-- **Mobile smoke test**: create an Appium session, save a screenshot + UI XML (`/source`) to `./artifacts/`
-- **Accessibility dump**: parse the UI XML and print the accessible strings (best-effort)
+- **Mobile smoke test**: create an Appium session, save a screenshot + UI XML (`/source`) to `./artifacts/`.
+- **Accessibility dump**: parse the UI XML and print "accessible strings" (best-effort).
+- **Interactive console**: live Appium REPL (`find`/`click`/`type`/`swipe`/`search`).
+- **Declarative spec runner**: JSON-driven deterministic actions + assertions.
+- **Live Hinge agent**: autonomous loop for `like`/`pass`/`send_message` + navigation (deterministic or LLM).
+- **Discover-card messaging**: comment + send like flow (`Like -> comment -> Send like`) when locators are present.
+- **Packet logging**: decision packets (JSONL) + screenshots/XML pointers for offline review.
+- **MCP control plane**: tool-based server for external coding agents to observe/decide/execute/step without restarting sessions.
 
 These are intentionally “fail fast”: you provide capabilities explicitly (no hidden defaults).
 
@@ -89,10 +169,11 @@ These are intentionally “fail fast”: you provide capabilities explicitly (no
 - ✅ Verified on a local **Android 14 (API 34) Google Play emulator**: Appium + UiAutomator2 can create a session and produce `artifacts/mobile_screenshot.png` and `artifacts/mobile_page_source.xml`.
 - ✅ Appium failures caused by missing `ANDROID_SDK_ROOT`/`ANDROID_HOME` are avoided by using `./scripts/start-appium-server.sh` and `./scripts/start-appium-mcp.sh` (they export these env vars).
 
-### Next step (prototype goal)
+### Next steps (practical)
 
-- Install and sign into the target app (e.g. Hinge) in the emulator, then capture `/source` and use the CLI XML search to discover stable locators.
-- Once we have locators, implement a first “interaction loop” for one app screen: open inbox → open a thread → extract last N messages → send a reply.
+- Stabilize locators by capturing packet logs across many cards/screens and iterating selectors from real artifacts.
+- Expand screen classification and action validation to handle more UI variants (paywalls, modals, roses, etc.).
+- Add a replay/evaluation harness that scores decision quality from packet logs without requiring the emulator.
 
 ### Local prerequisites (Android)
 
