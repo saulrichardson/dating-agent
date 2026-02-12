@@ -4,6 +4,7 @@ import base64
 import json
 import os
 import re
+import subprocess
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -14,7 +15,7 @@ from xml.etree import ElementTree
 import requests
 
 from .android_accessibility import extract_accessible_strings
-from .appium_http_client import AppiumHTTPClient, WebDriverElementRef
+from .appium_http_client import AppiumHTTPClient, AppiumHTTPError, WebDriverElementRef
 from .config import load_json_file, require_key
 
 
@@ -282,6 +283,8 @@ def _extract_package_name(xml: str) -> Optional[str]:
 
 def _classify_hinge_screen(strings: list[str]) -> str:
     lowered = [s.lower() for s in strings]
+    if any("out of free likes" in s for s in lowered):
+        return "hinge_like_paywall"
     if any("close sheet" in s for s in lowered) and any("rose" in s for s in lowered):
         return "hinge_overlay_rose_sheet"
     if any("no matches yet" in s for s in lowered):
@@ -384,12 +387,110 @@ def _send_message(
     *,
     input_locators: list[Locator],
     send_locators: list[Locator],
+    send_fallback_locators: Optional[list[Locator]] = None,
     text: str,
 ) -> tuple[Locator, Locator]:
     input_locator, input_el = _find_first_any(client, locators=input_locators)
     client.send_keys(input_el, text=text)
-    send_locator = _click_any(client, locators=send_locators)
+    try:
+        send_locator = _click_any(client, locators=send_locators)
+    except Exception:
+        if send_fallback_locators:
+            send_locator = _click_any(client, locators=send_fallback_locators)
+        else:
+            raise
     return input_locator, send_locator
+
+
+def _adb_input_text(text: str) -> None:
+    """
+    Type text into the currently focused Android input via adb.
+
+    This is used as a fallback when the visible composer is not exposed as an
+    editable element for WebDriver send_keys (common on custom React Native views).
+    """
+    cleaned = " ".join((text or "").split())
+    if not cleaned:
+        raise LiveHingeAgentError("Cannot input empty text via adb")
+    # Keep characters that typically survive adb input and normalize the rest.
+    cleaned = re.sub(r"[^A-Za-z0-9 @._,!?'-]", " ", cleaned)
+    cleaned = " ".join(cleaned.split())
+    adb_text = cleaned.replace(" ", "%s")
+    try:
+        subprocess.run(
+            ["adb", "shell", "input", "text", adb_text],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as e:
+        raise LiveHingeAgentError(f"Failed adb text input fallback: {e}") from e
+
+
+def _send_discover_message(
+    client: AppiumHTTPClient,
+    *,
+    like_locators: list[Locator],
+    input_locators: list[Locator],
+    send_locators: list[Locator],
+    text: str,
+) -> tuple[Locator, Locator, Locator]:
+    """
+    Send a Discover-card comment flow:
+    1) tap Like (opens comment composer), 2) type comment, 3) tap Send like.
+    """
+    like_locator: Optional[Locator] = None
+    try:
+        input_locator, input_el = _find_first_any(client, locators=input_locators)
+    except Exception:
+        like_locator = _click_any(client, locators=like_locators)
+        time.sleep(0.35)
+        try:
+            input_locator, input_el = _find_first_any(client, locators=input_locators)
+        except Exception:
+            xml_after_like = client.get_page_source()
+            strings_after_like = extract_accessible_strings(xml_after_like, limit=800)
+            lowered = [s.lower() for s in strings_after_like]
+            if any("out of free likes" in s for s in lowered):
+                raise LiveHingeAgentError("Discover message send blocked: out of free likes")
+            raise
+
+    # Some UIs return a non-editable view for the comment area. Click to focus.
+    try:
+        client.click(input_el)
+    except Exception:
+        # Refind once in case of stale references after animation.
+        input_locator, input_el = _find_first_any(client, locators=input_locators)
+        client.click(input_el)
+
+    typed = False
+    try:
+        client.send_keys(input_el, text=text)
+        typed = True
+    except AppiumHTTPError:
+        typed = False
+    except Exception:
+        typed = False
+
+    if not typed:
+        _adb_input_text(text)
+
+    send_locator = _click_any(client, locators=send_locators)
+    try:
+        post_xml = client.get_page_source()
+        post_strings = extract_accessible_strings(post_xml, limit=800)
+        lowered = [s.lower() for s in post_strings]
+        if any("out of free likes" in s for s in lowered):
+            raise LiveHingeAgentError("Discover message send blocked: out of free likes")
+    except LiveHingeAgentError:
+        raise
+    except Exception:
+        # Post-send inspection is best-effort only.
+        pass
+    if like_locator is None:
+        # Composer was already open; annotate with a synthetic locator to keep logs explicit.
+        like_locator = Locator(using="synthetic", value="discover_composer_already_open")
+    return like_locator, input_locator, send_locator
 
 
 def _render_template(template: str, *, name: Optional[str]) -> str:
@@ -824,6 +925,13 @@ def _build_available_actions(
 ) -> list[str]:
     available: set[str] = {"wait"}
     available.add("back")
+    has_like = _has_any(client, locators=locators.get("like", []))
+    has_pass = _has_any(client, locators=locators.get("pass", []))
+    has_message_input = _has_any(client, locators=locators.get("message_input", []))
+    has_send = _has_any(client, locators=locators.get("send", []))
+    discover_message_input_locators = locators.get("discover_message_input", [])
+    discover_send_locators = locators.get("discover_send", [])
+    discover_message_configured = bool(discover_message_input_locators) and bool(discover_send_locators)
 
     if _has_any(client, locators=locators.get("discover_tab", [])):
         available.add("goto_discover")
@@ -837,19 +945,20 @@ def _build_available_actions(
         available.add("goto_profile_hub")
 
     if screen_type == "hinge_discover_card":
-        if _has_any(client, locators=locators.get("like", [])):
+        if has_like:
             available.add("like")
-        if _has_any(client, locators=locators.get("pass", [])):
+        if has_pass:
             available.add("pass")
+        # Discover can support comment+like messaging on some UI variants.
+        if message_enabled and has_like and (discover_message_configured or (has_message_input and has_send)):
+            available.add("send_message")
 
     if screen_type in {"hinge_tab_shell", "hinge_matches_empty"}:
         if _has_any(client, locators=locators.get("open_thread", [])):
             available.add("open_thread")
 
     if screen_type == "hinge_chat" and message_enabled:
-        if _has_any(client, locators=locators.get("message_input", [])) and _has_any(
-            client, locators=locators.get("send", [])
-        ):
+        if has_message_input and has_send:
             available.add("send_message")
 
     return sorted(available)
@@ -896,6 +1005,23 @@ def _deterministic_decide(
             blocked = any(k in prompt_answer for k in profile.swipe_policy.block_prompt_keywords if k)
             has_required_flags = profile.swipe_policy.require_flags_all.issubset(flags)
             if (
+                profile.message_policy.enabled
+                and state.messages < profile.message_policy.max_messages
+                and "send_message" in available
+                and score >= profile.message_policy.min_quality_score_to_message
+                and has_required_flags
+                and not blocked
+            ):
+                text = _normalize_message_text(
+                    raw_text=_render_template(
+                        profile.message_policy.template,
+                        name=quality_features.get("profile_name_candidate"),
+                    ),
+                    profile=profile,
+                    quality_features=quality_features,
+                )
+                return "send_message", "explore_discover_message_opportunity", text
+            if (
                 score >= profile.swipe_policy.min_quality_score_like
                 and has_required_flags
                 and not blocked
@@ -936,6 +1062,21 @@ def _deterministic_decide(
     if directive.goal == "message":
         if screen_type == "hinge_overlay_rose_sheet" and "back" in available:
             return "back", "message_goal_overlay_recovery_back", None
+        if screen_type == "hinge_like_paywall" and "back" in available:
+            return "back", "message_goal_like_paywall_recovery_back", None
+        if screen_type == "hinge_discover_card":
+            if "send_message" in available and state.messages < profile.message_policy.max_messages:
+                text = _normalize_message_text(
+                    raw_text=_render_template(
+                        profile.message_policy.template,
+                        name=quality_features.get("profile_name_candidate"),
+                    ),
+                    profile=profile,
+                    quality_features=quality_features,
+                )
+                return "send_message", "message_goal_discover_message_surface", text
+            if "goto_matches" in available:
+                return "goto_matches", "message_goal_route_matches", None
         if screen_type == "hinge_matches_empty":
             if "goto_discover" in available:
                 return "goto_discover", "message_goal_no_matches_route_discover", None
@@ -979,6 +1120,22 @@ def _deterministic_decide(
                 return "pass", "required_flags_missing", None
             return "wait", "required_flags_missing_no_pass", None
 
+        if (
+            profile.message_policy.enabled
+            and state.messages < profile.message_policy.max_messages
+            and "send_message" in available
+            and score >= profile.message_policy.min_quality_score_to_message
+        ):
+            text = _normalize_message_text(
+                raw_text=_render_template(
+                    profile.message_policy.template,
+                    name=quality_features.get("profile_name_candidate"),
+                ),
+                profile=profile,
+                quality_features=quality_features,
+            )
+            return "send_message", "discover_profile_message_policy", text
+
         if score >= profile.swipe_policy.min_quality_score_like and "like" in available:
             return "like", f"score>={profile.swipe_policy.min_quality_score_like}", None
 
@@ -989,6 +1146,8 @@ def _deterministic_decide(
 
     if screen_type == "hinge_overlay_rose_sheet" and "back" in available:
         return "back", "swipe_goal_overlay_recovery_back", None
+    if screen_type == "hinge_like_paywall" and "back" in available:
+        return "back", "swipe_goal_like_paywall_recovery_back", None
 
     if screen_type == "hinge_chat":
         if (
@@ -1253,7 +1412,9 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
           "pass": [...],
           "open_thread": [...],
           "message_input": [...],
-          "send": [...]
+          "send": [...],
+          "discover_message_input": [...],
+          "discover_send": [...]
         }
       }
     """
@@ -1294,6 +1455,18 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
         "open_thread": _parse_locators(locators_raw.get("open_thread"), field="open_thread", context=context, required=True),
         "message_input": _parse_locators(locators_raw.get("message_input"), field="message_input", context=context, required=True),
         "send": _parse_locators(locators_raw.get("send"), field="send", context=context, required=True),
+        "discover_message_input": _parse_locators(
+            locators_raw.get("discover_message_input"),
+            field="discover_message_input",
+            context=context,
+            required=False,
+        ),
+        "discover_send": _parse_locators(
+            locators_raw.get("discover_send"),
+            field="discover_send",
+            context=context,
+            required=False,
+        ),
     }
 
     artifacts_dir = Path(str(config.get("artifacts_dir") or "artifacts/live_hinge")).resolve()
@@ -1525,14 +1698,30 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                         quality_features=quality_features,
                     )
                     if not dry_run:
-                        input_locator, send_locator = _send_message(
-                            client,
-                            input_locators=locator_map["message_input"],
-                            send_locators=locator_map["send"],
-                            text=message_text,
-                        )
-                        matched_locator = send_locator
-                        reason = f"{reason}; input={input_locator.using}:{input_locator.value}"
+                        if screen_type == "hinge_discover_card":
+                            discover_input_locators = locator_map.get("discover_message_input") or locator_map["message_input"]
+                            discover_send_locators = locator_map.get("discover_send") or locator_map["send"]
+                            like_locator, input_locator, send_locator = _send_discover_message(
+                                client,
+                                like_locators=locator_map["like"],
+                                input_locators=discover_input_locators,
+                                send_locators=discover_send_locators,
+                                text=message_text,
+                            )
+                            matched_locator = send_locator
+                            reason = (
+                                f"{reason}; discover_like={like_locator.using}:{like_locator.value}; "
+                                f"input={input_locator.using}:{input_locator.value}"
+                            )
+                        else:
+                            input_locator, send_locator = _send_message(
+                                client,
+                                input_locators=locator_map["message_input"],
+                                send_locators=locator_map["send"],
+                                text=message_text,
+                            )
+                            matched_locator = send_locator
+                            reason = f"{reason}; input={input_locator.using}:{input_locator.value}"
                     state.messages += 1
                 elif action == "back":
                     if not dry_run:

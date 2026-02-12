@@ -70,6 +70,11 @@ For the autonomous swipe/message flow, enable screenshot-conditioned LLM decisio
 
 This writes packet rows with decision + quality features + screenshot path, which can feed downstream ranking or QA pipelines.
 
+Discover message flow note:
+- `send_message` on Discover uses `discover_message_input` + `discover_send` locators after tapping Like.
+- Default examples target `Edit comment` and `Send like`.
+- If you see `You're out of free likes for today`, Hinge is blocking likes/comments behind a paywall (`hinge_like_paywall`).
+
 ## Personality Spec
 
 Use `persona_spec` in profile JSON to shape action + opener behavior:

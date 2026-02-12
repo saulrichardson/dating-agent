@@ -331,6 +331,8 @@ How decisions are made:
   - `deterministic`: rule + score policy.
   - `llm`: model chooses one action from available action set and writes a first message when needed.
 - Execute action in the same session (no restart) and append to the action log JSON artifact.
+  - On Discover cards, `send_message` follows the native sequence: `Like -> Add comment -> Send like`.
+  - If Hinge shows the "out of free likes" paywall, the agent classifies it as `hinge_like_paywall` and will try to back out.
 - Persist packet-level telemetry with optional screenshot/XML references (`persist_packet_log`, `packet_capture_screenshot`, `packet_capture_xml`).
 - Validate autonomous actions with post-action checks:
   - configurable `validation.require_screen_change_for`

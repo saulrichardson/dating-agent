@@ -90,6 +90,18 @@ def _parse_locator_map(config: dict[str, Any], *, context: str) -> dict[str, lis
             locators_raw.get("message_input"), field="message_input", context=context, required=True
         ),
         "send": lha._parse_locators(locators_raw.get("send"), field="send", context=context, required=True),
+        "discover_message_input": lha._parse_locators(
+            locators_raw.get("discover_message_input"),
+            field="discover_message_input",
+            context=context,
+            required=False,
+        ),
+        "discover_send": lha._parse_locators(
+            locators_raw.get("discover_send"),
+            field="discover_send",
+            context=context,
+            required=False,
+        ),
     }
 
 
@@ -157,6 +169,7 @@ def _execute_action(
     action: str,
     message_text: Optional[str],
     dry_run: bool,
+    screen_type: str,
     quality_features: dict[str, Any],
 ) -> dict[str, Any]:
     if action == "wait":
@@ -178,14 +191,28 @@ def _execute_action(
             quality_features=quality_features,
         )
         if not dry_run:
-            input_locator, send_locator = lha._send_message(
-                session.client,
-                input_locators=session.locator_map["message_input"],
-                send_locators=session.locator_map["send"],
-                text=outbound,
-            )
-            locator = {"input": {"using": input_locator.using, "value": input_locator.value}}
-            locator["send"] = {"using": send_locator.using, "value": send_locator.value}
+            if screen_type == "hinge_discover_card":
+                discover_input_locators = session.locator_map.get("discover_message_input") or session.locator_map["message_input"]
+                discover_send_locators = session.locator_map.get("discover_send") or session.locator_map["send"]
+                like_locator, input_locator, send_locator = lha._send_discover_message(
+                    session.client,
+                    like_locators=session.locator_map["like"],
+                    input_locators=discover_input_locators,
+                    send_locators=discover_send_locators,
+                    text=outbound,
+                )
+                locator = {"discover_like": {"using": like_locator.using, "value": like_locator.value}}
+                locator["input"] = {"using": input_locator.using, "value": input_locator.value}
+                locator["send"] = {"using": send_locator.using, "value": send_locator.value}
+            else:
+                input_locator, send_locator = lha._send_message(
+                    session.client,
+                    input_locators=session.locator_map["message_input"],
+                    send_locators=session.locator_map["send"],
+                    text=outbound,
+                )
+                locator = {"input": {"using": input_locator.using, "value": input_locator.value}}
+                locator["send"] = {"using": send_locator.using, "value": send_locator.value}
         else:
             locator = None
         session.state.messages += 1
@@ -427,6 +454,7 @@ def execute(
         action=action.strip(),
         message_text=message_text,
         dry_run=use_dry_run,
+        screen_type=str(packet.get("screen_type") or "hinge_unknown"),
         quality_features=packet.get("quality_features") or {},
     )
     session.state.iterations += 1
@@ -502,6 +530,7 @@ def step(
             action=action,
             message_text=message_text,
             dry_run=use_dry_run,
+            screen_type=str(packet.get("screen_type") or "hinge_unknown"),
             quality_features=packet.get("quality_features") or {},
         )
         session.state.iterations += 1
