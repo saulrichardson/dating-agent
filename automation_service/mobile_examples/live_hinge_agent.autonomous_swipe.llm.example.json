@@ -126,6 +126,34 @@
         "using": "-android uiautomator",
         "value": "new UiSelector().textContains(\"Send\")"
       }
+    ],
+    "discover_message_input": [
+      {
+        "using": "accessibility id",
+        "value": "Edit comment"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Edit comment\")"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Add a comment\")"
+      }
+    ],
+    "discover_send": [
+      {
+        "using": "accessibility id",
+        "value": "Send like"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Send like\")"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Send Like\")"
+      }
     ]
   }
 }

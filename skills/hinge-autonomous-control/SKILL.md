@@ -82,4 +82,6 @@ Use `observe` + `execute` when a human/operator wants direct action control.
 - Never continue when package is not `co.hinge.app` unless explicitly intended.
 - Keep `validation.max_consecutive_failures` low during live runs.
 - If `send_message` fails on locators, stop and fix selectors before continuing.
+- Discover messaging requires `discover_message_input` + `discover_send` locators (examples use `Edit comment` and `Send like`).
+- If you hit the "out of free likes" paywall (`hinge_like_paywall`), stop or back out; the account may not be able to send likes/comments until quota resets or the user upgrades.
 - Prefer explicit errors to silent fallback behavior.

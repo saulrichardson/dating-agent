@@ -30,3 +30,7 @@ Transport: `stdio`.
 - `dry_run` defaults to the value in the config used in `start_session`.
 - `step` is the preferred autonomous primitive for agents.
 - Snapshot artifacts are stored under the config's `artifacts_dir` in `mcp_snapshots/`.
+- `send_message` executes different UI sequences depending on `screen_type`:
+  - `hinge_discover_card`: uses the Discover composer path (`Like -> Edit/Add comment -> Send like`) when configured.
+  - `hinge_chat`: types into the thread composer and taps `Send`.
+- If Hinge shows the "out of free likes" paywall, the agent may classify the screen as `hinge_like_paywall` and attempt to back out.
