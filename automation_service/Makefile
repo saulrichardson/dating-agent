@@ -1,24 +1,13 @@
-.PHONY: build up down logs restart clean start
+.PHONY: help cli mcp
 
-build:
-	docker-compose build
+help:
+	@echo "Automation Service (Appium-only)"
+	@echo ""
+	@echo "  make cli   - Run interactive Appium CLI"
+	@echo "  make mcp   - Start Hinge MCP control server"
 
-up:
-	docker-compose up -d
+cli:
+	python -m automation_service.cli
 
-down:
-	docker-compose down
-
-logs:
-	docker-compose logs -f
-
-restart:
-	docker-compose restart
-
-clean:
-	docker-compose down -v
-
-start: build up
-	@echo "Automation service is running at http://localhost:8082"
-	@echo "View logs with: make logs"
-
+mcp:
+	python -m automation_service.mobile.hinge_agent_mcp

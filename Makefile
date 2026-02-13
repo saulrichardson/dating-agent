@@ -1,51 +1,34 @@
-.PHONY: build up down logs restart clean start status help
+.PHONY: help setup emulator appium appium-driver appium-mcp hinge-mcp cli
 
 help:
-	@echo "Concierge Services - Makefile Commands"
+	@echo "Concierge (Appium-first)"
 	@echo ""
-	@echo "  make start     - Build and start all services"
-	@echo "  make up        - Start all services"
-	@echo "  make down      - Stop all services"
-	@echo "  make build     - Build all service images"
-	@echo "  make logs      - View logs from all services"
-	@echo "  make restart   - Restart all services"
-	@echo "  make clean     - Stop services and remove volumes"
-	@echo "  make status    - Show service status"
-	@echo ""
-	@echo "Services:"
-	@echo "  - Context Service:    http://localhost:8080"
-	@echo "  - Persona Service:    http://localhost:8081"
-	@echo "  - Automation Service: http://localhost:8082"
+	@echo "  make setup          - Create venv and install Python deps"
+	@echo "  make emulator       - Start Android emulator"
+	@echo "  make appium-driver  - Install Appium UiAutomator2 driver"
+	@echo "  make appium         - Start Appium server"
+	@echo "  make appium-mcp     - Start Appium MCP server"
+	@echo "  make hinge-mcp      - Start Hinge MCP control server"
+	@echo "  make cli            - Run interactive mobile CLI"
 
-build:
-	docker-compose build
+setup:
+	python3 -m venv venv
+	. venv/bin/activate && pip install -r requirements.txt
 
-up:
-	docker-compose up -d
-	@echo ""
-	@echo "✓ Services started:"
-	@echo "  - Context Service:    http://localhost:8080"
-	@echo "  - Persona Service:    http://localhost:8081"
-	@echo "  - Automation Service: http://localhost:8082"
+emulator:
+	./scripts/start-android-emulator.sh
 
-down:
-	docker-compose down
+appium-driver:
+	./scripts/install-appium-uiautomator2.sh
 
-logs:
-	docker-compose logs -f
+appium:
+	./scripts/start-appium-server.sh
 
-restart:
-	docker-compose restart
+appium-mcp:
+	./scripts/start-appium-mcp.sh
 
-clean:
-	docker-compose down -v
-	@echo "✓ Cleaned up all services and volumes"
+hinge-mcp:
+	./scripts/start-hinge-agent-mcp.sh
 
-start: build up
-	@echo ""
-	@echo "✓ All services are running!"
-	@echo "  View logs with: make logs"
-
-status:
-	@docker-compose ps
-
+cli:
+	. venv/bin/activate && python -m automation_service.cli

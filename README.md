@@ -1,294 +1,136 @@
-# Concierge
+# Concierge (Appium-First)
 
-Dating app automation with persona extraction and context management services.
+Native mobile automation runtime for apps like Hinge and Tinder using Android + Appium.
 
-## Architecture (High Level)
+This repository is now a **single methodology codebase**:
 
-This repo’s 0→1 focus is **mobile automation (Android + Appium)** for native apps like Hinge, with an artifact-first loop:
+- one long-lived Appium session
+- one observe -> decide -> act loop
+- one artifact pipeline for offline analysis and replay
 
-- **Control plane**: run via CLI (`python -m automation_service.cli`) or the MCP server (`./scripts/start-hinge-agent-mcp.sh`).
-- **Execution plane**: a **single long-lived Appium session** controlling an Android emulator/device running Hinge.
-- **Data plane**: write **decision packets + screenshots + UI XML** every step so you can debug, evaluate, and build downstream scoring/review pipelines.
+Legacy Playwright/browser automation and legacy context/persona microservices were removed.
 
-### Component Diagram
+## Architecture
 
 ```mermaid
 flowchart LR
-  subgraph Host["Your Machine"]
-    CLI["CLI\nautomation_service/cli.py"]
-    MCP["MCP Server\nhinge_agent_mcp.py"]
-    Agent["Live Agent Loop\nlive_hinge_agent.py"]
-    Artifacts[("Artifacts\nartifacts/")]
+  subgraph Host["Local Machine"]
+    CLI["CLI\npython -m automation_service.cli"]
+    MCP["Hinge MCP Server\nscripts/start-hinge-agent-mcp.sh"]
+    Agent["Live Agent\nlive_hinge_agent.py"]
+    Capture["Full-Fidelity Capture\nfull_fidelity_hinge.py"]
+    Offline["Offline Extraction\noffline_artifacts.py"]
+    Artifacts[("artifacts/")]
     Appium["Appium Server\n:4723"]
-    Device["Android Emulator/Device\nHinge App"]
+    Device["Android Emulator/Device\nHinge/Tinder"]
 
     CLI --> Agent
     MCP --> Agent
+    CLI --> Capture
+    CLI --> Offline
     Agent --> Artifacts
-    Agent -->|HTTP JSON| Appium
-    Appium -->|UiAutomator2| Device
+    Capture --> Artifacts
+    Offline --> Artifacts
+    Agent --> Appium
+    Capture --> Appium
+    Appium --> Device
   end
 
-  Agent -. "optional LLM decision + vision" .-> LLM["OpenAI API"]
-  Artifacts --> Downstream["Offline pipelines\nranking / QA / review"]
+  Agent -. "optional LLM decision" .-> LLM["OpenAI API"]
 ```
 
-### The Decision Loop (Per Iteration)
+## Decision Loop
 
 ```mermaid
 sequenceDiagram
-  participant Agent as Live Agent
-  participant Appium as Appium Server
-  participant Device as Android/Hinge
-  participant LLM as LLM (optional)
-  participant Disk as Artifacts
+  participant A as Agent
+  participant P as Appium
+  participant D as Android App
+  participant L as LLM (optional)
+  participant F as Artifacts
 
-  Agent->>Appium: GET /source + GET /screenshot
-  Appium->>Device: capture UI tree + screenshot
-  Device-->>Appium: XML + PNG
-  Appium-->>Agent: XML + PNG
-  Agent->>Agent: extract strings + classify screen + build packet
-  alt deterministic
-    Agent->>Agent: choose action via rules
-  else LLM
-    Agent->>LLM: packet (+ screenshot) -> JSON {action, message_text}
-    LLM-->>Agent: decision JSON
+  A->>P: GET source + screenshot
+  P->>D: capture XML + PNG
+  D-->>P: XML + PNG
+  P-->>A: XML + PNG
+  A->>A: classify screen + score profile + list available actions
+  alt deterministic mode
+    A->>A: choose action by profile policy
+  else llm mode
+    A->>L: packet (+ screenshot)
+    L-->>A: {action, message_text}
   end
-  Agent->>Appium: execute action (tap/pass/like/message/back)
-  Agent->>Disk: append packet log + action log + save artifacts
-  Agent->>Appium: optional validation check (GET /source)
+  A->>P: execute action
+  A->>F: append action log + packet log + snapshots
+  A->>P: validate post-action transition (optional)
 ```
 
-### Hinge-Specific Behavior
+## Quick Start
 
-- `send_message` on **Discover cards** follows the native sequence: `Like -> Add/Edit comment -> Send like`.
-- If Hinge shows the **"out of free likes"** paywall, the agent classifies it as `hinge_like_paywall` and attempts to back out (and will fail loudly if blocked).
+1. Create environment:
 
-### Repository Map
-
-| Path | What it is |
-| --- | --- |
-| `automation_service/mobile/live_hinge_agent.py` | End-to-end autonomous loop (observe → decide → act → validate → log). |
-| `automation_service/mobile/appium_http_client.py` | Minimal Appium WebDriver client (tap/swipe/keys, screenshots, /source). |
-| `automation_service/mobile/android_accessibility.py` | Extract "accessible strings" from UI XML (used for screen classification + signals). |
-| `automation_service/mobile_examples/` | Example configs (capabilities, locators, personas, live runs). |
-| `automation_service/mobile/hinge_agent_mcp.py` | MCP server providing tool-based control for external coding agents. |
-| `scripts/start-hinge-agent-mcp.sh` | Start the MCP server (stdio). |
-| `artifacts/` | Outputs: packet logs, action logs, screenshots, full-fidelity captures. |
-
-## Services
-
-This project includes three microservices:
-
-- **Context Service** (`http://localhost:8080`) - Manages conversation context per user/match
-- **Persona Service** (`http://localhost:8081`) - Extracts messaging style and provides context to Automation Service
-- **Automation Service** (`http://localhost:8082`) - Playwright + Appium automation with a mobile-first CLI workflow
-
-### Quick Start (All Services)
-
-```bash
-make start
-```
-
-This will build and start both services. View logs with `make logs`.
-
-### Individual Service Management
-
-Each service can also be managed independently:
-
-```bash
-# Context Service
-cd context_service && make start
-
-# Persona Service  
-cd persona_service && make start
-
-# Automation Service
-cd automation_service && make start
-```
-
-See `make help` for all available commands.
-
-## Setup
-
-1. Create a virtual environment:
 ```bash
 python3 -m venv venv
-```
-
-2. Activate the virtual environment:
-```bash
-# On macOS/Linux:
 source venv/bin/activate
-
-# On Windows:
-venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
 pip install -r requirements.txt
 ```
 
-4. Install Playwright browsers:
-```bash
-playwright install chromium
-```
-
-## Usage
-
-### Automation Service CLI
-
-**Important:** Always activate the virtual environment before running:
-
-```bash
-source venv/bin/activate
-python -m automation_service.cli
-```
-
-## Mobile Automation (Android + Appium)
-
-For apps that do **not** have a website (native-only), Playwright won’t work. The repo now includes
-a full-fidelity Android/Appium pipeline for native automation (single-session agent loop + artifact capture).
-
-### What’s implemented today
-
-- **Mobile smoke test**: create an Appium session, save a screenshot + UI XML (`/source`) to `./artifacts/`.
-- **Accessibility dump**: parse the UI XML and print "accessible strings" (best-effort).
-- **Interactive console**: live Appium REPL (`find`/`click`/`type`/`swipe`/`search`).
-- **Declarative spec runner**: JSON-driven deterministic actions + assertions.
-- **Live Hinge agent**: autonomous loop for `like`/`pass`/`send_message` + navigation (deterministic or LLM).
-- **Discover-card messaging**: comment + send like flow (`Like -> comment -> Send like`) when locators are present.
-- **Packet logging**: decision packets (JSONL) + screenshots/XML pointers for offline review.
-- **MCP control plane**: tool-based server for external coding agents to observe/decide/execute/step without restarting sessions.
-
-These are intentionally “fail fast”: you provide capabilities explicitly (no hidden defaults).
-
-### Current status
-
-- ✅ Verified on a local **Android 14 (API 34) Google Play emulator**: Appium + UiAutomator2 can create a session and produce `artifacts/mobile_screenshot.png` and `artifacts/mobile_page_source.xml`.
-- ✅ Appium failures caused by missing `ANDROID_SDK_ROOT`/`ANDROID_HOME` are avoided by using `./scripts/start-appium-server.sh` and `./scripts/start-appium-mcp.sh` (they export these env vars).
-
-### Next steps (practical)
-
-- Stabilize locators by capturing packet logs across many cards/screens and iterating selectors from real artifacts.
-- Expand screen classification and action validation to handle more UI variants (paywalls, modals, roses, etc.).
-- Add a replay/evaluation harness that scores decision quality from packet logs without requiring the emulator.
-
-### Local prerequisites (Android)
-
-- An Appium server running locally (default `http://127.0.0.1:4723`)
-- An Android device or emulator available to Appium (ADB + SDK tooling)
-
-### Bootstrap an emulator (recommended for prototyping)
-
-This creates an Android 14 (API 34) **Google Play** emulator (needed to install apps like Hinge from Play Store).
-
-```bash
-brew install android-platform-tools
-brew install --cask android-commandlinetools
-
-yes | sdkmanager --sdk_root=/opt/homebrew/share/android-commandlinetools \
-  "emulator" \
-  "platform-tools" \
-  "platforms;android-34" \
-  "system-images;android-34;google_apis_playstore;arm64-v8a"
-
-echo "no" | avdmanager create avd \
-  -n concierge_api34_play \
-  -k "system-images;android-34;google_apis_playstore;arm64-v8a" \
-  -d pixel_7
-```
-
-Start the emulator:
+2. Start Android emulator:
 
 ```bash
 ./scripts/start-android-emulator.sh
 ```
 
-> You’ll need to sign into the Play Store inside the emulator to install apps.
-
-### Start Appium locally
-
-Install the Android driver (once):
+3. Install Appium driver (first run only):
 
 ```bash
 ./scripts/install-appium-uiautomator2.sh
 ```
 
-Start the server:
+4. Start Appium server:
 
 ```bash
 ./scripts/start-appium-server.sh
 ```
 
-### Start the Appium MCP server (optional, for locator exploration)
-
-If you want to use MCP to inspect screens and generate locators:
-
-```bash
-./scripts/start-appium-mcp.sh
-```
-
-> Note: this script uses Node 20 via `fnm` because we saw module-resolution issues running `appium-mcp`
-> under Node 24 on this machine.
-
-### Run the mobile smoke test / accessibility dump
+5. Run CLI:
 
 ```bash
 source venv/bin/activate
 python -m automation_service.cli
 ```
 
-Choose:
-- **Option 4**: Mobile smoke test (writes `artifacts/mobile_screenshot.png` and `artifacts/mobile_page_source.xml`)
-- **Option 5**: Mobile accessibility dump (prints accessible strings)
-- **Option 6**: Search captured UI XML to discover locator candidates
-- **Option 7**: Mobile interactive console (live Appium REPL: `find`/`click`/`type`/`swipe`/`search`)
-- **Option 8**: Run a repeatable mobile script from JSON (`automation_service/mobile_examples/mobile_script.example.json`)
-- **Option 9**: Run app-specific vertical inbox probe (`automation_service/mobile_examples/vertical_hinge_inbox_probe.example.json` or `automation_service/mobile_examples/vertical_tinder_inbox_probe.example.json`)
-- **Option 10**: Run declarative app-agnostic mobile spec (`automation_service/mobile_examples/mobile_spec.example.json`)
-- **Option 11**: Offline artifact extraction (convert captured XML/screenshot artifacts into JSONL for downstream scoring/analysis)
-- **Option 12**: Live Hinge agent (single Appium session; natural-language directive + profile policy + optional LLM decision engine)
-- **Option 13**: Full-fidelity Hinge capture (raw XML + PNG + node graph + normalized profile/message streams)
-  - Hinge deterministic tab routine example: `automation_service/mobile_examples/hinge_deterministic_tabs.example.json`
-  - Hinge matches-state probe example: `automation_service/mobile_examples/hinge_matches_state_probe.example.json`
-  - Hinge offline extraction config: `automation_service/mobile_examples/offline_artifact_extract.hinge.example.json`
-  - Live Hinge agent config: `automation_service/mobile_examples/live_hinge_agent.example.json`
-  - Live Hinge agent LLM config: `automation_service/mobile_examples/live_hinge_agent.llm.example.json`
-  - Live Hinge autonomous swipe + opener config: `automation_service/mobile_examples/live_hinge_agent.autonomous_swipe.llm.example.json`
-  - Live Hinge stress suite config: `automation_service/mobile_examples/live_hinge_stress_suite.example.json`
-  - Full-fidelity capture config: `automation_service/mobile_examples/hinge_full_fidelity_capture.example.json`
-  - Hinge preference profile: `automation_service/mobile_examples/hinge_agent_profile.example.json`
-  - Hinge profile (creative/playful): `automation_service/mobile_examples/hinge_agent_profile.creative_playful.example.json`
-  - Hinge profile (direct/intentional): `automation_service/mobile_examples/hinge_agent_profile.direct_intentional.example.json`
-  - Hinge tool catalog + NL examples: `automation_service/mobile_examples/hinge_agent_tools.md`
+## CLI Surface
 
-Capabilities are loaded from JSON. A starter template is included at:
-`automation_service/mobile_examples/android_capabilities.example.json`
+`python -m automation_service.cli` exposes only mobile operations:
 
-If you want Appium to launch a specific installed app, see:
-`automation_service/mobile_examples/android_capabilities.launch_app.example.json`
+1. smoke test (screenshot + XML)
+2. accessibility dump
+3. UI XML locator search
+4. interactive Appium console
+5. scripted JSON routine
+6. app-specific vertical inbox probe
+7. declarative spec runner
+8. offline artifact extraction
+9. live Hinge agent
+10. full-fidelity Hinge capture
 
-### Two Prototype Tracks (Tinder/Hinge)
+## MCP Control Plane
 
-This repo now includes two explicit prototyping paths for native app automation:
+Start MCP server:
 
-1. **App-agnostic spec runner** (`Option 10`)
-   - JSON-driven actions with retries, waits, assertions, variable extraction, and template interpolation.
-   - Example: `automation_service/mobile_examples/mobile_spec.example.json`
+```bash
+./scripts/start-hinge-agent-mcp.sh
+```
 
-2. **App-specific vertical probes** (`Option 9`)
-   - Curated locator candidates for specific apps (`hinge`, `tinder`) to quickly test inbox/navigation viability.
-   - Examples:
-     - `automation_service/mobile_examples/vertical_hinge_inbox_probe.example.json`
-     - `automation_service/mobile_examples/vertical_tinder_inbox_probe.example.json`
+Tool docs:
 
-### Deterministic Hinge Routines (Read-Only)
+- `docs/hinge-mcp-tools.md`
+- `skills/hinge-autonomous-control/SKILL.md`
 
-These routines avoid sending likes/messages and are meant for reliability testing.
+## Core Workflows
 
-1. Run a full bottom-nav traversal (Discover, Matches, Likes You, Standouts, Profile Hub):
+### 1) Deterministic validation run
 
 ```bash
 source venv/bin/activate
@@ -300,75 +142,9 @@ run_mobile_spec(
 PY
 ```
 
-2. Probe the Matches tab state (handles both "no matches yet" and chat-ready surfaces):
+### 2) Autonomous live agent (deterministic or LLM)
 
-```bash
-source venv/bin/activate
-python - <<'PY'
-from automation_service.mobile.spec_runner import run_mobile_spec
-run_mobile_spec(
-    spec_json_path="automation_service/mobile_examples/hinge_matches_state_probe.example.json"
-)
-PY
-```
-
-3. Benchmark deterministic stability over repeated runs:
-
-```bash
-source venv/bin/activate
-python scripts/run-mobile-spec-benchmark.py \
-  --spec automation_service/mobile_examples/hinge_deterministic_tabs.example.json \
-  --iterations 3
-```
-
-The benchmark writes a JSON report to `artifacts/mobile_spec_benchmark_<timestamp>.json`.
-
-### Offline Artifact Dataset Export
-
-If you already captured Appium artifacts (`*.xml` + optional `*.png`), export them to JSONL for offline pipelines:
-
-```bash
-source venv/bin/activate
-python - <<'PY'
-from automation_service.mobile.offline_artifacts import run_offline_artifact_extraction
-result = run_offline_artifact_extraction(
-    config_json_path="automation_service/mobile_examples/offline_artifact_extract.hinge.example.json"
-)
-print(result)
-PY
-```
-
-Outputs are written under `artifacts/offline_exports/`:
-- `<prefix>_screens_<timestamp>.jsonl`: one row per screen (paths, screen type, strings, quality features)
-- `<prefix>_nodes_<timestamp>.jsonl`: optional flattened node rows (`resource-id`, `text`, `bounds`, etc.)
-- `<prefix>_summary_<timestamp>.json`: run stats and errors
-
-For tighter datasets, set `package_allowlist` in the extraction config (for Hinge: `["co.hinge.app"]`) to exclude non-app captures like Play Store screens.
-
-Each screen row also includes deterministic ranking fields:
-- `quality_score_v1` (0..100)
-- `quality_reasons_v1` (why that score was assigned)
-
-Build a downstream swipe queue from extracted screens:
-
-```bash
-source venv/bin/activate
-python scripts/build-hinge-swipe-candidates.py \
-  --screens-jsonl artifacts/offline_exports/hinge_dataset_screens_<timestamp>.jsonl \
-  --like-threshold 75 \
-  --review-threshold 50 \
-  --exclude-skip
-```
-
-This emits:
-- `hinge_swipe_candidates_<timestamp>.jsonl` (decision rows: `like` / `review` / `pass` / `skip`)
-- `hinge_swipe_candidates_<timestamp>.summary.json` (counts by decision)
-
-### Live Hinge Agent (Natural Language + Preference Profile + LLM)
-
-This run mode keeps one continuous Appium session and chooses actions in-loop.
-
-Run deterministic policy mode:
+Deterministic:
 
 ```bash
 source venv/bin/activate
@@ -380,10 +156,11 @@ run_live_hinge_agent(
 PY
 ```
 
-Run LLM decision mode (requires `OPENAI_API_KEY`):
+LLM:
 
 ```bash
 source venv/bin/activate
+export OPENAI_API_KEY=...
 python - <<'PY'
 from automation_service.mobile.live_hinge_agent import run_live_hinge_agent
 run_live_hinge_agent(
@@ -392,87 +169,7 @@ run_live_hinge_agent(
 PY
 ```
 
-Run full autonomous swipe + personalized opener mode (LLM + screenshot packet + rich persona):
-
-```bash
-source venv/bin/activate
-python - <<'PY'
-from automation_service.mobile.live_hinge_agent import run_live_hinge_agent
-run_live_hinge_agent(
-    config_json_path="automation_service/mobile_examples/live_hinge_agent.autonomous_swipe.llm.example.json"
-)
-PY
-```
-
-How decisions are made:
-- Build a live packet from the current screen (`screen_type`, extracted signals, available actions).
-- Optionally attach a decision screenshot from the same frame (`decision_engine.llm.include_screenshot=true`).
-- Apply a natural-language directive from `command_query` (for example: caps, message/swipe goal, one-shot navigation).
-- Evaluate action via `decision_engine.type`:
-  - `deterministic`: rule + score policy.
-  - `llm`: model chooses one action from available action set and writes a first message when needed.
-- Execute action in the same session (no restart) and append to the action log JSON artifact.
-  - On Discover cards, `send_message` follows the native sequence: `Like -> Add comment -> Send like`.
-  - If Hinge shows the "out of free likes" paywall, the agent classifies it as `hinge_like_paywall` and will try to back out.
-- Persist packet-level telemetry with optional screenshot/XML references (`persist_packet_log`, `packet_capture_screenshot`, `packet_capture_xml`).
-- Validate autonomous actions with post-action checks:
-  - configurable `validation.require_screen_change_for`
-  - stop on repeated failed transitions via `validation.max_consecutive_failures`
-
-`dry_run` note:
-- In `dry_run=true`, no taps/typing are executed. You will see decision selection and logging, but screen state does not advance.
-
-Stress-test multiple paths:
-
-```bash
-source venv/bin/activate
-python scripts/stress-test-live-hinge-agent.py \
-  --base-config automation_service/mobile_examples/live_hinge_agent.example.json \
-  --suite-config automation_service/mobile_examples/live_hinge_stress_suite.example.json
-```
-
-This writes a stress report under `artifacts/live_hinge_stress/` with:
-- pass/fail split by `execution_failed` vs `assertion_failed`
-- action execution coverage (`aggregate_covered_actions`, `aggregate_missing_actions`)
-- action availability coverage (`aggregate_available_actions`, `aggregate_unavailable_actions`)
-- validation metrics (`total_validation_failed`, `worst_repeat_action_streak`)
-
-`live_hinge_stress_suite.example.json` supports per-scenario assertions:
-- `max_validation_failed`
-- `min_unique_actions`
-- `max_repeat_action_streak`
-- `expect_actions_any`, `expect_actions_all`
-- `expect_screens_any`, `expect_screens_all`
-
-### Hinge Agent MCP Server (Free-Form Agent Control)
-
-For coding agents that need free-form control over a live Hinge session, run:
-
-```bash
-./scripts/start-hinge-agent-mcp.sh
-```
-
-This server keeps one Appium session alive and exposes tools:
-- `start_session`: start from a `live_hinge_agent` config
-- `observe`: capture current packet (screen type, score, available actions)
-- `decide`: choose next action with deterministic or LLM mode
-- `execute`: execute a concrete action
-- `step`: one autonomous tick (`observe -> decide -> execute`)
-- `stop_session`: close session cleanly
-
-MCP entrypoint module:
-- `automation_service/mobile/hinge_agent_mcp.py`
-
-Reference docs:
-- `docs/hinge-mcp-tools.md`
-- `skills/hinge-autonomous-control/SKILL.md`
-
-### Hinge Full-Fidelity Capture (Profile + Message Artifacts)
-
-This mode captures high-fidelity records per frame so you can feed downstream profile scoring
-and message tracking pipelines without losing raw context.
-
-Run:
+### 3) Full-fidelity capture for downstream pipelines
 
 ```bash
 source venv/bin/activate
@@ -484,49 +181,49 @@ run_hinge_full_fidelity_capture(
 PY
 ```
 
-Outputs are written to a session folder under `artifacts/full_fidelity_hinge/`:
-- `frames.jsonl`: one row per loop iteration (screen type, package, strings, hashes, capture paths)
-- `profiles.jsonl`: normalized profile snapshots (name candidates, prompt/answer pairs, flags, fidelity score)
-- `messages.jsonl`: normalized thread snapshots and deltas (new messages when chat surfaces change)
-- `nodes.jsonl`: flattened node graph (`resource_id`, `text`, `content_desc`, `bounds`, etc.)
-- `summary.json`: run counts and distribution metrics
-
-Navigation behavior is explicit in config:
-- `navigation.mode="observe"`: capture only (no taps)
-- `navigation.mode="matches_poll"` with `navigation.execute=true`: attempt periodic routing to Matches and thread-open checks
-
-### Credential Bootstrap (Manual Sign-In)
-
-For Option 10 (declarative spec runner), you need a signed-in app state in the emulator first.
-
-1. Start emulator:
-   - `./scripts/start-android-emulator.sh`
-2. Start Appium:
-   - `./scripts/start-appium-server.sh`
-3. In emulator Play Store, install target app and finish app login manually.
-4. Run Option 10 with:
-   - `automation_service/mobile_examples/mobile_spec.example.json`
-
-To figure out the foreground app package/activity (for capabilities), run:
+### 4) Offline dataset extraction from artifacts
 
 ```bash
-./scripts/android-current-activity.sh
+source venv/bin/activate
+python - <<'PY'
+from automation_service.mobile.offline_artifacts import run_offline_artifact_extraction
+run_offline_artifact_extraction(
+    config_json_path="automation_service/mobile_examples/offline_artifact_extract.hinge.example.json"
+)
+PY
 ```
 
-### Configuration
+## Repo Layout
 
-- `CONTEXT_SERVICE_URL` (optional): Base URL for the Context Service used by chat history extraction.
-  - Default: `http://localhost:8080` (Docker Compose)
-  - If running Context Service locally (Option 3 in `context_service/README.md`): set `CONTEXT_SERVICE_URL=http://localhost:5000`
+- `automation_service/mobile/` -> Appium runtime, agent, capture, extraction modules.
+- `automation_service/mobile_examples/` -> runnable JSON configs and example profiles.
+- `scripts/` -> emulator/Appium startup + benchmark/stress tooling.
+- `docs/hinge-mcp-tools.md` -> MCP tool contract.
+- `skills/hinge-autonomous-control/SKILL.md` -> operator workflow for agent control.
+- `artifacts/` -> generated logs, screenshots, xml, datasets (gitignored).
 
-Or use the service directly:
+## Environment Variables
+
+Optional `.env` values:
+
+- `APPIUM_SERVER_URL` (default `http://127.0.0.1:4723`)
+- `APPIUM_PORT` (default `4723`)
+- `ANDROID_SDK_ROOT`
+- `ANDROID_HOME`
+- `OPENAI_API_KEY` (required only for LLM decision mode)
+
+## Make Targets
+
 ```bash
-cd automation_service && make start
+make help
 ```
 
-## Deactivate
+Key targets:
 
-When you're done, deactivate the virtual environment:
-```bash
-deactivate
-```
+- `make setup`
+- `make emulator`
+- `make appium-driver`
+- `make appium`
+- `make appium-mcp`
+- `make hinge-mcp`
+- `make cli`

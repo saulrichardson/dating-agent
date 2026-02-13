@@ -1,81 +1,49 @@
-# Automation Service
+# Automation Service (Appium-Only)
 
-HTTP service and CLI for dating app UI automation using Playwright and Appium.
+`automation_service` contains the native-mobile automation runtime used by this repo.
 
-## Quick Start
+## Entrypoints
 
-### Using Docker (Recommended)
+- CLI: `python -m automation_service.cli`
+- Hinge MCP server: `python -m automation_service.mobile.hinge_agent_mcp`
+- Live autonomous agent: `automation_service/mobile/live_hinge_agent.py`
+- Full-fidelity extractor: `automation_service/mobile/full_fidelity_hinge.py`
+
+## Scope
+
+This package intentionally does **not** include:
+
+- Playwright/browser automation
+- Bumble web automation
+- Legacy HTTP microservice APIs
+
+All flows assume:
+
+1. Android emulator/device is running.
+2. Appium server is running.
+3. App under test (e.g. Hinge) is installed and signed in.
+
+## Local Install
+
+From repo root:
 
 ```bash
-make start
-```
-
-This will build and start the service at `http://localhost:8082`
-
-### Manual Start
-
-```bash
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-playwright install chromium
-python server.py
 ```
 
-### CLI Usage
+## Run
 
 ```bash
-python cli.py
-```
-
-Or from the project root:
-```bash
+source venv/bin/activate
 python -m automation_service.cli
 ```
 
-## API Endpoints
+## Key Paths
 
-### Health Check
-
-```bash
-GET /health
-```
-
-Returns: `{"status": "ok"}`
-
-### Save Authentication State
-
-```bash
-POST /auth/save
-```
-
-Starts the authentication save process in the background.
-
-### Test Chat Flow
-
-```bash
-POST /chat/test
-```
-
-Starts the chat flow test in the background.
-
-### Extract Chat History
-
-```bash
-POST /chat/extract
-Content-Type: application/json
-
-{
-  "user_id": "default"
-}
-```
-
-Starts chat history extraction and persona upload.
-
-## Makefile Commands
-
-- `make build` - Build Docker image
-- `make up` - Start service
-- `make down` - Stop service
-- `make logs` - View logs
-- `make restart` - Restart service
-- `make clean` - Stop and remove volumes
-- `make start` - Build and start (recommended)
+- `automation_service/mobile/appium_http_client.py`
+- `automation_service/mobile/live_hinge_agent.py`
+- `automation_service/mobile/hinge_agent_mcp.py`
+- `automation_service/mobile/full_fidelity_hinge.py`
+- `automation_service/mobile_examples/`
