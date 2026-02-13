@@ -68,7 +68,8 @@ Use packet logs as the canonical downstream input because each row includes:
 - `available_actions`
 - `decision`
 - `message_text` (when applicable)
-- paths to screenshot/XML artifacts (if enabled)
+- `packet_screenshot_path` / `packet_xml_path` (pre-action evidence, if enabled)
+- `post_action_screenshot_path` (post-action evidence, if `capture_each_action=true`)
 
 ## MCP Mode (Free-Form Agents)
 
