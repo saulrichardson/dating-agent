@@ -47,6 +47,8 @@ class FakeAppiumClient:
             return [WebDriverElementRef(element_id="el-like")]
         if key == ("accessibility id", "Skip"):
             return [WebDriverElementRef(element_id="el-pass")]
+        if key == ("accessibility id", "Close"):
+            return [WebDriverElementRef(element_id="el-close")]
         if key == ("accessibility id", "Edit comment"):
             if self.composer_open:
                 return [WebDriverElementRef(element_id="el-comment")]
@@ -159,6 +161,7 @@ def _locator_map() -> dict[str, list[lha.Locator]]:
         "open_thread": [lha.Locator(using="accessibility id", value="Open chat")],
         "message_input": [lha.Locator(using="accessibility id", value="Edit comment")],
         "send": [lha.Locator(using="accessibility id", value="Send like")],
+        "overlay_close": [lha.Locator(using="accessibility id", value="Close")],
         "discover_message_input": [lha.Locator(using="accessibility id", value="Edit comment")],
         "discover_send": [lha.Locator(using="accessibility id", value="Send like")],
     }
@@ -198,6 +201,7 @@ def run_validation() -> None:
                 "pass",
                 "send_message",
                 "back",
+                "dismiss_overlay",
                 "wait",
             }
             _assert(required_actions.issubset(actions), "Missing required high-level actions in action catalog")
@@ -222,6 +226,17 @@ def run_validation() -> None:
             _assert("el-like" in client.clicked_ids, "Expected Discover flow to click Like before composing")
             _assert(any(el == "el-comment" for el, _ in client.sent_text), "Expected message typed into comment field")
             _assert("el-send" in client.clicked_ids, "Expected Discover flow to click Send like")
+
+            overlay_execution = mcpmod._execute_action(
+                mcpmod._SESSIONS[session_name],
+                action="dismiss_overlay",
+                message_text=None,
+                dry_run=False,
+                screen_type="hinge_like_paywall",
+                quality_features={},
+            )
+            _assert(overlay_execution["executed"] == "dismiss_overlay", "Expected dismiss_overlay execution")
+            _assert("el-close" in client.clicked_ids, "Expected overlay close affordance to be clicked")
 
             find_result = mcpmod.find_elements(
                 session_name=session_name,

@@ -1,41 +1,30 @@
 {
   "appium_server_url": "http://127.0.0.1:4723",
   "capabilities_json_path": "automation_service/mobile_examples/android_capabilities.example.json",
-  "profile_json_path": "automation_service/mobile_examples/hinge_agent_profile.creative_playful.example.json",
+  "profile_json_path": "automation_service/mobile_examples/hinge_agent_profile.direct_intentional.example.json",
 
-  "command_query": "Autonomous swipe and opener run for 25 actions. Prefer profiles with specific prompts. Send a personalized first message only when confidence is high.",
+  "command_query": "Go to discover. Send message now. Live run for 6 actions.",
   "decision_engine": {
-    "type": "llm",
-    "llm_failure_mode": "fallback_deterministic",
-    "llm": {
-      "model": "gpt-4.1-mini",
-      "temperature": 0.2,
-      "timeout_s": 40,
-      "api_key_env": "OPENAI_API_KEY",
-      "base_url": "https://api.openai.com",
-      "include_screenshot": true,
-      "image_detail": "auto",
-      "max_observed_strings": 140
-    }
+    "type": "deterministic"
   },
 
-  "artifacts_dir": "artifacts/live_hinge_autonomous_swipe",
+  "artifacts_dir": "artifacts/live_hinge_comment_probe",
   "target_package": "co.hinge.app",
   "target_activity": ".ui.AppActivity",
   "foreground_recovery": {
     "enabled": true,
-    "max_attempts": 4,
+    "max_attempts": 5,
     "cooldown_s": 1.0
   },
   "pause_before_start": false,
-  "dry_run": true,
-  "max_runtime_s": 600,
-  "max_actions": 25,
+  "dry_run": false,
+  "max_runtime_s": 240,
+  "max_actions": 6,
   "loop_sleep_s": 1.0,
   "capture_each_action": true,
   "persist_packet_log": true,
   "packet_capture_screenshot": true,
-  "packet_capture_xml": false,
+  "packet_capture_xml": true,
   "validation": {
     "enabled": true,
     "post_action_sleep_s": 0.8,
@@ -93,30 +82,22 @@
       {
         "using": "-android uiautomator",
         "value": "new UiSelector().descriptionContains(\"Like\")"
-      },
-      {
-        "using": "-android uiautomator",
-        "value": "new UiSelector().textContains(\"Like\")"
       }
     ],
     "pass": [
       {
         "using": "-android uiautomator",
         "value": "new UiSelector().descriptionContains(\"Skip\")"
-      },
-      {
-        "using": "-android uiautomator",
-        "value": "new UiSelector().descriptionContains(\"Pass\")"
       }
     ],
     "open_thread": [
       {
         "using": "-android uiautomator",
-        "value": "new UiSelector().textContains(\"Message\")"
+        "value": "new UiSelector().textContains(\"Send\")"
       },
       {
         "using": "-android uiautomator",
-        "value": "new UiSelector().textContains(\"Send\")"
+        "value": "new UiSelector().textContains(\"Message\")"
       }
     ],
     "message_input": [

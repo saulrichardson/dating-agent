@@ -169,6 +169,11 @@ _HINGE_ACTION_CATALOG: list[dict[str, str]] = [
         "description": "Dismiss overlays/modals or navigate one level back.",
     },
     {
+        "action": "dismiss_overlay",
+        "human_action": "Tap overlay close affordance",
+        "description": "Close visible Hinge overlays (for example Rose/paywall sheets) without Android back.",
+    },
+    {
         "action": "wait",
         "human_action": "Observe",
         "description": "Take no action this iteration.",
@@ -285,13 +290,25 @@ def _classify_hinge_screen(strings: list[str]) -> str:
     lowered = [s.lower() for s in strings]
     if any("out of free likes" in s for s in lowered):
         return "hinge_like_paywall"
-    if any("close sheet" in s for s in lowered) and any("rose" in s for s in lowered):
+    if (
+        (any("close sheet" in s for s in lowered) and any("rose" in s for s in lowered))
+        or any("catch their eye by sending a rose" in s for s in lowered)
+    ):
         return "hinge_overlay_rose_sheet"
     if any("no matches yet" in s for s in lowered):
         return "hinge_matches_empty"
     if any("when a like is mutual" in s for s in lowered):
         return "hinge_matches_empty"
-    if any(s.startswith("skip ") or s == "skip" for s in lowered) and any(s.startswith("like ") for s in lowered):
+    discover_like_signal = any(s.startswith("like ") for s in lowered) or any(
+        "send like with message" in s for s in lowered
+    )
+    discover_pass_signal = any(s.startswith("skip ") or s == "skip" for s in lowered) or any(
+        "undo the previous pass rating" in s for s in lowered
+    )
+    discover_composer_signal = any(
+        ("edit comment" in s) or ("add a comment" in s) or ("send like with message" in s) for s in lowered
+    )
+    if (discover_like_signal and discover_pass_signal) or discover_composer_signal:
         return "hinge_discover_card"
     if any("type a message" in s for s in lowered) or ("send" in lowered):
         return "hinge_chat"
@@ -425,6 +442,35 @@ def _adb_input_text(text: str) -> None:
         )
     except Exception as e:
         raise LiveHingeAgentError(f"Failed adb text input fallback: {e}") from e
+
+
+def _resolve_activity_component(*, package_name: str, activity_name: str) -> str:
+    activity = activity_name.strip()
+    if not activity:
+        raise LiveHingeAgentError("target_activity must be non-empty when foreground recovery is enabled")
+    if "/" in activity:
+        return activity
+    if activity.startswith("."):
+        return f"{package_name}/{activity}"
+    return f"{package_name}/{activity}"
+
+
+def _adb_start_activity(*, package_name: str, activity_name: str) -> str:
+    """
+    Bring the target app to foreground via adb am start.
+    Returns the component string that was launched.
+    """
+    component = _resolve_activity_component(package_name=package_name, activity_name=activity_name)
+    try:
+        subprocess.run(
+            ["adb", "shell", "am", "start", "-n", component],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as e:
+        raise LiveHingeAgentError(f"Failed to foreground app via adb start ({component}): {e}") from e
+    return component
 
 
 def _send_discover_message(
@@ -781,6 +827,8 @@ def _parse_natural_language_query(query: Optional[str]) -> NLDirective:
         force_action_once = "goto_profile_hub"
     elif "go back" in lowered or "press back" in lowered:
         force_action_once = "back"
+    elif "dismiss overlay" in lowered or "close overlay" in lowered:
+        force_action_once = "dismiss_overlay"
     elif "open thread now" in lowered or "force open thread" in lowered:
         force_action_once = "open_thread"
     elif "send message now" in lowered or "force send message" in lowered:
@@ -932,6 +980,10 @@ def _build_available_actions(
     discover_message_input_locators = locators.get("discover_message_input", [])
     discover_send_locators = locators.get("discover_send", [])
     discover_message_configured = bool(discover_message_input_locators) and bool(discover_send_locators)
+    has_discover_message_input = _has_any(client, locators=discover_message_input_locators)
+    has_discover_send = _has_any(client, locators=discover_send_locators)
+    discover_surface_signals = has_like or has_pass or has_discover_message_input or has_discover_send
+    has_overlay_close = _has_any(client, locators=locators.get("overlay_close", []))
 
     if _has_any(client, locators=locators.get("discover_tab", [])):
         available.add("goto_discover")
@@ -953,13 +1005,15 @@ def _build_available_actions(
         if message_enabled and has_like and (discover_message_configured or (has_message_input and has_send)):
             available.add("send_message")
 
-    if screen_type in {"hinge_tab_shell", "hinge_matches_empty"}:
+    if screen_type in {"hinge_tab_shell", "hinge_matches_empty"} and not discover_surface_signals:
         if _has_any(client, locators=locators.get("open_thread", [])):
             available.add("open_thread")
 
     if screen_type == "hinge_chat" and message_enabled:
         if has_message_input and has_send:
             available.add("send_message")
+    if screen_type in {"hinge_overlay_rose_sheet", "hinge_like_paywall"} and has_overlay_close:
+        available.add("dismiss_overlay")
 
     return sorted(available)
 
@@ -987,6 +1041,13 @@ def _deterministic_decide(
         # Route toward prerequisite surfaces when the requested force action
         # is not immediately available.
         if forced == "send_message":
+            if screen_type in {"hinge_overlay_rose_sheet", "hinge_like_paywall"}:
+                if "dismiss_overlay" in available:
+                    return "dismiss_overlay", "forced_send_message_overlay_recovery_dismiss", None
+                if "back" in available:
+                    return "back", "forced_send_message_overlay_recovery_back", None
+            if "goto_discover" in available:
+                return "goto_discover", "forced_send_message_route_discover", None
             if "open_thread" in available:
                 return "open_thread", "forced_send_message_route_open_thread", None
             if "goto_matches" in available:
@@ -999,8 +1060,11 @@ def _deterministic_decide(
                 return "goto_discover", f"forced_{forced}_route_discover", None
 
     if directive.goal == "explore":
-        if screen_type == "hinge_overlay_rose_sheet" and "back" in available:
-            return "back", "explore_overlay_recovery_back", None
+        if screen_type == "hinge_overlay_rose_sheet":
+            if "dismiss_overlay" in available:
+                return "dismiss_overlay", "explore_overlay_recovery_dismiss", None
+            if "back" in available:
+                return "back", "explore_overlay_recovery_back", None
         if screen_type == "hinge_discover_card":
             blocked = any(k in prompt_answer for k in profile.swipe_policy.block_prompt_keywords if k)
             has_required_flags = profile.swipe_policy.require_flags_all.issubset(flags)
@@ -1032,7 +1096,11 @@ def _deterministic_decide(
             if "pass" in available and state.passes < profile.swipe_policy.max_passes:
                 return "pass", "explore_fallback_pass", None
 
-        if profile.message_policy.enabled and state.messages < profile.message_policy.max_messages:
+        if (
+            profile.message_policy.enabled
+            and state.messages < profile.message_policy.max_messages
+            and screen_type != "hinge_discover_card"
+        ):
             if "send_message" in available:
                 text = _normalize_message_text(
                     raw_text=_render_template(
@@ -1060,11 +1128,24 @@ def _deterministic_decide(
         return "wait", "explore_wait", None
 
     if directive.goal == "message":
-        if screen_type == "hinge_overlay_rose_sheet" and "back" in available:
-            return "back", "message_goal_overlay_recovery_back", None
-        if screen_type == "hinge_like_paywall" and "back" in available:
-            return "back", "message_goal_like_paywall_recovery_back", None
+        if state.consecutive_validation_failures >= 2:
+            if screen_type == "hinge_discover_card" and "back" in available:
+                return "back", "message_goal_validation_recovery_back", None
+            if "goto_discover" in available:
+                return "goto_discover", "message_goal_validation_recovery_discover", None
+        if screen_type == "hinge_overlay_rose_sheet":
+            if "dismiss_overlay" in available:
+                return "dismiss_overlay", "message_goal_overlay_recovery_dismiss", None
+            if "back" in available:
+                return "back", "message_goal_overlay_recovery_back", None
+        if screen_type == "hinge_like_paywall":
+            if "dismiss_overlay" in available:
+                return "dismiss_overlay", "message_goal_like_paywall_recovery_dismiss", None
+            if "back" in available:
+                return "back", "message_goal_like_paywall_recovery_back", None
         if screen_type == "hinge_discover_card":
+            if state.consecutive_validation_failures >= 2 and "back" in available:
+                return "back", "message_goal_discover_validation_recovery_back", None
             if "send_message" in available and state.messages < profile.message_policy.max_messages:
                 text = _normalize_message_text(
                     raw_text=_render_template(
@@ -1081,6 +1162,8 @@ def _deterministic_decide(
             if "goto_discover" in available:
                 return "goto_discover", "message_goal_no_matches_route_discover", None
             return "wait", "message_goal_no_matches_available", None
+        if screen_type == "hinge_tab_shell" and "goto_discover" in available:
+            return "goto_discover", "message_goal_tab_shell_route_discover", None
         if "send_message" in available and state.messages < profile.message_policy.max_messages:
             text = _normalize_message_text(
                 raw_text=_render_template(
@@ -1142,12 +1225,21 @@ def _deterministic_decide(
         if "pass" in available and state.passes < profile.swipe_policy.max_passes:
             return "pass", f"score<{profile.swipe_policy.min_quality_score_like}", None
 
+        if "back" in available:
+            return "back", "discover_no_pass_recovery_back", None
+
         return "wait", "no_like_or_pass_available", None
 
-    if screen_type == "hinge_overlay_rose_sheet" and "back" in available:
-        return "back", "swipe_goal_overlay_recovery_back", None
-    if screen_type == "hinge_like_paywall" and "back" in available:
-        return "back", "swipe_goal_like_paywall_recovery_back", None
+    if screen_type == "hinge_overlay_rose_sheet":
+        if "dismiss_overlay" in available:
+            return "dismiss_overlay", "swipe_goal_overlay_recovery_dismiss", None
+        if "back" in available:
+            return "back", "swipe_goal_overlay_recovery_back", None
+    if screen_type == "hinge_like_paywall":
+        if "dismiss_overlay" in available:
+            return "dismiss_overlay", "swipe_goal_like_paywall_recovery_dismiss", None
+        if "back" in available:
+            return "back", "swipe_goal_like_paywall_recovery_back", None
 
     if screen_type == "hinge_chat":
         if (
@@ -1387,6 +1479,13 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
           }
         },
         "artifacts_dir": "artifacts/live_hinge",
+        "target_package": "co.hinge.app",
+        "target_activity": ".ui.AppActivity",
+        "foreground_recovery": {
+          "enabled": true,
+          "max_attempts": 3,
+          "cooldown_s": 1.0
+        },
         "pause_before_start": true,
         "dry_run": true,
         "max_runtime_s": 300,
@@ -1399,7 +1498,7 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
         "validation": {
           "enabled": true,
           "post_action_sleep_s": 0.8,
-          "require_screen_change_for": ["like", "pass", "open_thread", "send_message", "back"],
+          "require_screen_change_for": ["like", "pass", "open_thread", "send_message", "back", "dismiss_overlay"],
           "max_consecutive_failures": 4
         },
         "locators": {
@@ -1413,6 +1512,7 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
           "open_thread": [...],
           "message_input": [...],
           "send": [...],
+          "overlay_close": [...],
           "discover_message_input": [...],
           "discover_send": [...]
         }
@@ -1455,6 +1555,12 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
         "open_thread": _parse_locators(locators_raw.get("open_thread"), field="open_thread", context=context, required=True),
         "message_input": _parse_locators(locators_raw.get("message_input"), field="message_input", context=context, required=True),
         "send": _parse_locators(locators_raw.get("send"), field="send", context=context, required=True),
+        "overlay_close": _parse_locators(
+            locators_raw.get("overlay_close"),
+            field="overlay_close",
+            context=context,
+            required=False,
+        ),
         "discover_message_input": _parse_locators(
             locators_raw.get("discover_message_input"),
             field="discover_message_input",
@@ -1471,6 +1577,32 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
 
     artifacts_dir = Path(str(config.get("artifacts_dir") or "artifacts/live_hinge")).resolve()
     _ensure_dir(artifacts_dir)
+    target_package = _as_non_empty_str(
+        config.get("target_package") or "co.hinge.app",
+        field="target_package",
+        context=context,
+    )
+    target_activity = _as_non_empty_str(
+        config.get("target_activity") or ".ui.AppActivity",
+        field="target_activity",
+        context=context,
+    )
+    foreground_recovery_raw = config.get("foreground_recovery", {})
+    if foreground_recovery_raw is None:
+        foreground_recovery_raw = {}
+    if not isinstance(foreground_recovery_raw, dict):
+        raise LiveHingeAgentError(f"{context}: foreground_recovery must be an object when provided")
+    foreground_recovery_enabled = bool(foreground_recovery_raw.get("enabled", True))
+    foreground_recovery_max_attempts = _as_positive_int(
+        foreground_recovery_raw.get("max_attempts", 3),
+        field="max_attempts",
+        context=f"{context}: foreground_recovery",
+    )
+    foreground_recovery_cooldown_s = _as_non_negative_float(
+        foreground_recovery_raw.get("cooldown_s", 1.0),
+        field="cooldown_s",
+        context=f"{context}: foreground_recovery",
+    )
 
     dry_run = bool(config.get("dry_run", True))
     pause_before_start = bool(config.get("pause_before_start", False))
@@ -1499,7 +1631,7 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
     )
     require_screen_change_for_raw = validation_raw.get(
         "require_screen_change_for",
-        ["like", "pass", "open_thread", "send_message", "back"],
+        ["like", "pass", "open_thread", "send_message", "back", "dismiss_overlay"],
     )
     if (
         not isinstance(require_screen_change_for_raw, list)
@@ -1534,6 +1666,7 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
     packet_log_path: Optional[Path] = None
     packet_log_fh = None
     packet_artifacts_dir = artifacts_dir / "decision_packets"
+    outside_target_package_streak = 0
     if packet_capture_screenshot or packet_capture_xml or persist_packet_log:
         _ensure_dir(packet_artifacts_dir)
 
@@ -1546,6 +1679,7 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
         "like": "like",
         "pass": "pass",
         "open_thread": "open_thread",
+        "dismiss_overlay": "overlay_close",
     }
 
     try:
@@ -1597,23 +1731,54 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                 strings=strings,
             )
 
-            if package_name != "co.hinge.app":
+            if package_name != target_package:
+                outside_target_package_streak += 1
+                recovery_attempted = False
+                recovery_status = "disabled"
+                recovery_component = None
+                if foreground_recovery_enabled and outside_target_package_streak <= foreground_recovery_max_attempts:
+                    recovery_attempted = True
+                    try:
+                        recovery_component = _adb_start_activity(
+                            package_name=target_package,
+                            activity_name=target_activity,
+                        )
+                        recovery_status = "launched"
+                    except Exception as e:
+                        recovery_status = f"launch_failed:{e}"
+                    if foreground_recovery_cooldown_s > 0:
+                        time.sleep(foreground_recovery_cooldown_s)
+                elif foreground_recovery_enabled:
+                    recovery_status = "max_attempts_exceeded"
+
                 event = {
                     "ts": step_ts,
                     "iteration": iteration_idx,
                     "package_name": package_name,
+                    "target_package": target_package,
                     "screen_type": screen_type,
                     "decision": "wait",
-                    "reason": "not_in_hinge_package",
+                    "reason": "not_in_target_package",
+                    "foreground_recovery": {
+                        "enabled": foreground_recovery_enabled,
+                        "attempted": recovery_attempted,
+                        "status": recovery_status,
+                        "component": recovery_component,
+                        "outside_target_package_streak": outside_target_package_streak,
+                    },
                     "packet_screenshot_path": None if packet_screenshot_path is None else str(packet_screenshot_path),
                     "packet_xml_path": None if packet_xml_path is None else str(packet_xml_path),
                 }
                 state.action_log.append(event)
                 if packet_log_fh is not None:
                     packet_log_fh.write(json.dumps(event, ensure_ascii=False) + "\n")
-                print(f"[{iteration_idx}] wait: package={package_name!r} (expect 'co.hinge.app')")
+                print(
+                    f"[{iteration_idx}] wait: package={package_name!r} "
+                    f"(expect {target_package!r}) recovery={recovery_status}"
+                )
                 time.sleep(loop_sleep_s)
                 continue
+            outside_target_package_streak = 0
 
             available_actions = _build_available_actions(
                 screen_type=screen_type,
@@ -1756,7 +1921,13 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                         quality_features=post_quality_features,
                         strings=post_strings,
                     )
-                    changed = (post_fingerprint != pre_fingerprint) or (post_screen_type != screen_type)
+                    # Fingerprint uses a limited string subset; XML comparison catches UI changes
+                    # that don't alter accessible strings (for example composer open/close).
+                    changed = (
+                        (post_xml != xml)
+                        or (post_fingerprint != pre_fingerprint)
+                        or (post_screen_type != screen_type)
+                    )
                     if changed:
                         validation_status = "passed"
                         validation_reason = "screen_changed"

@@ -39,6 +39,7 @@ _ACTION_TO_LOCATOR_KEY: dict[str, str] = {
     "like": "like",
     "pass": "pass",
     "open_thread": "open_thread",
+    "dismiss_overlay": "overlay_close",
 }
 
 mcp = FastMCP(
@@ -123,6 +124,12 @@ def _parse_locator_map(config: dict[str, Any], *, context: str) -> dict[str, lis
             locators_raw.get("message_input"), field="message_input", context=context, required=True
         ),
         "send": lha._parse_locators(locators_raw.get("send"), field="send", context=context, required=True),
+        "overlay_close": lha._parse_locators(
+            locators_raw.get("overlay_close"),
+            field="overlay_close",
+            context=context,
+            required=False,
+        ),
         "discover_message_input": lha._parse_locators(
             locators_raw.get("discover_message_input"),
             field="discover_message_input",

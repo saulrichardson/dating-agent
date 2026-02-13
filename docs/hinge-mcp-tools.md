@@ -42,4 +42,7 @@ Transport: `stdio`.
 - `send_message` executes different UI sequences depending on `screen_type`:
   - `hinge_discover_card`: uses the Discover composer path (`Like -> Edit/Add comment -> Send like`) when configured.
   - `hinge_chat`: types into the thread composer and taps `Send`.
+- `dismiss_overlay` is a high-level action returned by `action_catalog()` and may appear in `available_actions` when the screen is:
+  - `hinge_overlay_rose_sheet` or `hinge_like_paywall`
+  - and the config provides `locators.overlay_close` that match a visible close affordance (examples use `content-desc` contains `Close sheet` and `accessibility id` `Close`).
 - If Hinge shows the "out of free likes" paywall, the agent may classify the screen as `hinge_like_paywall` and attempt to back out.
