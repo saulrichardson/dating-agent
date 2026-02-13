@@ -1665,7 +1665,9 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
     state = _RuntimeState()
     packet_log_path: Optional[Path] = None
     packet_log_fh = None
-    packet_artifacts_dir = artifacts_dir / "decision_packets"
+    # Keep decision packet artifacts per-run so repeated runs don't overwrite evidence.
+    run_artifact_tag = f"{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}_{session_id[:8]}"
+    packet_artifacts_dir = artifacts_dir / "decision_packets" / run_artifact_tag
     outside_target_package_streak = 0
     if packet_capture_screenshot or packet_capture_xml or persist_packet_log:
         _ensure_dir(packet_artifacts_dir)
