@@ -8,7 +8,7 @@ from typing import Any, Optional
 from mcp.server.fastmcp import FastMCP
 
 from .android_accessibility import extract_accessible_strings
-from .appium_http_client import AppiumHTTPClient
+from .appium_http_client import AppiumHTTPClient, WebDriverElementRef
 from .config import load_json_file, require_key
 from . import live_hinge_agent as lha
 
@@ -59,6 +59,39 @@ def _must_get_session(session_name: str) -> _ManagedSession:
     if session is None:
         raise RuntimeError(f"Session {session_name!r} not found. Call start_session first.")
     return session
+
+
+def _snapshot_artifact_path(*, artifacts_dir: Path, stem: str, ext: str) -> Path:
+    safe_stem = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in stem.strip())
+    if not safe_stem:
+        safe_stem = "artifact"
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    return artifacts_dir / "mcp_snapshots" / f"{safe_stem}_{ts}.{ext.lstrip('.')}"
+
+
+def _find_element_or_raise(
+    session: _ManagedSession,
+    *,
+    using: str,
+    value: str,
+    index: int,
+) -> WebDriverElementRef:
+    if not isinstance(using, str) or not using.strip():
+        raise RuntimeError("'using' must be a non-empty string")
+    if not isinstance(value, str) or not value.strip():
+        raise RuntimeError("'value' must be a non-empty string")
+    if not isinstance(index, int) or index < 0:
+        raise RuntimeError("'index' must be an integer >= 0")
+
+    elements = session.client.find_elements(using=using.strip(), value=value.strip())
+    if not elements:
+        raise RuntimeError(f"No elements found for locator using={using!r} value={value!r}")
+    if index >= len(elements):
+        raise RuntimeError(
+            f"Element index out of range: index={index}, available={len(elements)} "
+            f"for locator using={using!r} value={value!r}"
+        )
+    return elements[index]
 
 
 def _parse_locator_map(config: dict[str, Any], *, context: str) -> dict[str, list[lha.Locator]]:
@@ -368,6 +401,220 @@ def observe(session_name: str = "default", include_screenshot: bool = True) -> d
     return {
         "session_name": session_name,
         "packet": packet,
+    }
+
+
+@mcp.tool()
+def get_page_source(
+    session_name: str = "default",
+    persist_snapshot_artifact: bool = True,
+) -> dict[str, Any]:
+    """
+    Return current raw UI XML source for the active session.
+    """
+    session = _must_get_session(session_name)
+    xml = session.client.get_page_source()
+    xml_path: Optional[Path] = None
+    if persist_snapshot_artifact:
+        snapshot_dir = session.artifacts_dir / "mcp_snapshots"
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        xml_path = _snapshot_artifact_path(artifacts_dir=session.artifacts_dir, stem="mcp_source", ext="xml")
+        xml_path.write_text(xml, encoding="utf-8")
+    return {
+        "session_name": session_name,
+        "xml": xml,
+        "xml_path": None if xml_path is None else str(xml_path),
+    }
+
+
+@mcp.tool()
+def capture_screenshot(
+    session_name: str = "default",
+    persist_snapshot_artifact: bool = True,
+) -> dict[str, Any]:
+    """
+    Capture a PNG screenshot for the active session.
+    """
+    session = _must_get_session(session_name)
+    png = session.client.get_screenshot_png_bytes()
+    screenshot_path: Optional[Path] = None
+    if persist_snapshot_artifact:
+        snapshot_dir = session.artifacts_dir / "mcp_snapshots"
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        screenshot_path = _snapshot_artifact_path(
+            artifacts_dir=session.artifacts_dir,
+            stem="mcp_screenshot",
+            ext="png",
+        )
+        screenshot_path.write_bytes(png)
+    return {
+        "session_name": session_name,
+        "bytes": len(png),
+        "screenshot_path": None if screenshot_path is None else str(screenshot_path),
+    }
+
+
+@mcp.tool()
+def find_elements(
+    session_name: str = "default",
+    using: str = "xpath",
+    value: str = "",
+    limit: int = 10,
+    include_text: bool = True,
+    include_rect: bool = True,
+) -> dict[str, Any]:
+    """
+    Find elements by raw locator and optionally return text/rect for each match.
+    """
+    session = _must_get_session(session_name)
+    if not isinstance(limit, int) or limit <= 0:
+        raise RuntimeError("'limit' must be an integer > 0")
+
+    locator_using = using.strip()
+    locator_value = value.strip()
+    if not locator_using or not locator_value:
+        raise RuntimeError("'using' and 'value' must be non-empty")
+
+    elements = session.client.find_elements(using=locator_using, value=locator_value)
+    payload: list[dict[str, Any]] = []
+    for idx, element in enumerate(elements[:limit]):
+        row: dict[str, Any] = {
+            "index": idx,
+            "element_id": element.element_id,
+        }
+        if include_text:
+            try:
+                row["text"] = session.client.get_element_text(element)
+            except Exception as e:
+                row["text_error"] = str(e)
+        if include_rect:
+            try:
+                row["rect"] = session.client.get_element_rect(element)
+            except Exception as e:
+                row["rect_error"] = str(e)
+        payload.append(row)
+
+    return {
+        "session_name": session_name,
+        "using": locator_using,
+        "value": locator_value,
+        "total_found": len(elements),
+        "returned": len(payload),
+        "elements": payload,
+    }
+
+
+@mcp.tool()
+def click_element(
+    session_name: str = "default",
+    using: str = "xpath",
+    value: str = "",
+    index: int = 0,
+) -> dict[str, Any]:
+    """
+    Click a specific element selected by locator + index.
+    """
+    session = _must_get_session(session_name)
+    element = _find_element_or_raise(session, using=using, value=value, index=index)
+    session.client.click(element)
+    return {
+        "session_name": session_name,
+        "clicked": True,
+        "using": using.strip(),
+        "value": value.strip(),
+        "index": index,
+        "element_id": element.element_id,
+    }
+
+
+@mcp.tool()
+def type_into_element(
+    session_name: str = "default",
+    using: str = "xpath",
+    value: str = "",
+    text: str = "",
+    index: int = 0,
+) -> dict[str, Any]:
+    """
+    Type text into a specific element selected by locator + index.
+    """
+    session = _must_get_session(session_name)
+    if not isinstance(text, str) or not text:
+        raise RuntimeError("'text' must be a non-empty string")
+    element = _find_element_or_raise(session, using=using, value=value, index=index)
+    session.client.send_keys(element, text=text)
+    return {
+        "session_name": session_name,
+        "typed": True,
+        "using": using.strip(),
+        "value": value.strip(),
+        "index": index,
+        "text_length": len(text),
+        "element_id": element.element_id,
+    }
+
+
+@mcp.tool()
+def tap_point(session_name: str = "default", x: int = 0, y: int = 0) -> dict[str, Any]:
+    """
+    Tap absolute viewport coordinates.
+    """
+    session = _must_get_session(session_name)
+    session.client.tap(x=int(x), y=int(y))
+    return {
+        "session_name": session_name,
+        "tapped": True,
+        "x": int(x),
+        "y": int(y),
+    }
+
+
+@mcp.tool()
+def swipe_points(
+    session_name: str = "default",
+    x1: int = 0,
+    y1: int = 0,
+    x2: int = 0,
+    y2: int = 0,
+    duration_ms: int = 600,
+) -> dict[str, Any]:
+    """
+    Swipe between two absolute viewport points.
+    """
+    session = _must_get_session(session_name)
+    session.client.swipe(
+        x1=int(x1),
+        y1=int(y1),
+        x2=int(x2),
+        y2=int(y2),
+        duration_ms=int(duration_ms),
+    )
+    return {
+        "session_name": session_name,
+        "swiped": True,
+        "from": {"x": int(x1), "y": int(y1)},
+        "to": {"x": int(x2), "y": int(y2)},
+        "duration_ms": int(duration_ms),
+    }
+
+
+@mcp.tool()
+def press_keycode(
+    session_name: str = "default",
+    keycode: int = 4,
+    metastate: Optional[int] = None,
+) -> dict[str, Any]:
+    """
+    Press an Android keycode (e.g. Back=4, Home=3, Enter=66).
+    """
+    session = _must_get_session(session_name)
+    metastate_int = None if metastate is None else int(metastate)
+    session.client.press_keycode(keycode=int(keycode), metastate=metastate_int)
+    return {
+        "session_name": session_name,
+        "pressed": True,
+        "keycode": int(keycode),
+        "metastate": metastate_int,
     }
 
 
