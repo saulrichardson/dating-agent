@@ -9,6 +9,13 @@
   },
 
   "artifacts_dir": "artifacts/live_hinge",
+  "target_package": "co.hinge.app",
+  "target_activity": ".ui.AppActivity",
+  "foreground_recovery": {
+    "enabled": true,
+    "max_attempts": 4,
+    "cooldown_s": 1.0
+  },
   "pause_before_start": false,
   "dry_run": true,
   "max_runtime_s": 300,
@@ -26,7 +33,8 @@
       "pass",
       "open_thread",
       "send_message",
-      "back"
+      "back",
+      "dismiss_overlay"
     ],
     "max_consecutive_failures": 4
   },
@@ -150,6 +158,20 @@
       {
         "using": "-android uiautomator",
         "value": "new UiSelector().descriptionContains(\"Send\")"
+      }
+    ],
+    "overlay_close": [
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().descriptionContains(\"Close sheet\")"
+      },
+      {
+        "using": "accessibility id",
+        "value": "Close"
+      },
+      {
+        "using": "-android uiautomator",
+        "value": "new UiSelector().textContains(\"Close\")"
       }
     ],
     "discover_message_input": [

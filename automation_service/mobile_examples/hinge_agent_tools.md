@@ -13,8 +13,9 @@ Actions are only valid when they are currently available on-screen.
 | `open_thread` | Tap a match thread | Open a chat thread from matches. |
 | `like` | Tap Like | Like the current card item. |
 | `pass` | Tap Skip/Pass | Skip the current card item. |
-| `send_message` | Type and send message | Send one message in an open thread. |
+| `send_message` | Type and send message | Send one message (either via Discover comment-like composer or in an open thread). |
 | `back` | Android back | Dismiss overlays/modals or navigate one level back. |
+| `dismiss_overlay` | Tap overlay close | Close visible overlays (Roses sheet / paywall) when a close affordance is present. |
 | `wait` | No tap | Observe only for this loop iteration. |
 
 ## Natural-Language Directive Examples
@@ -29,6 +30,7 @@ These go into `command_query` in `live_hinge_agent*.json`.
 - `Explore freely for 20 actions. Live run.`
 - `Go to matches. Live run for 6 actions.`
 - `Open thread now and message for 6 actions.`
+- `Dismiss overlay and go to discover.`
 - `Force wait for 3 actions. Dry run.`
 
 ## Validation Controls
@@ -40,7 +42,7 @@ Use `validation` in live config to harden autonomous execution:
   "validation": {
     "enabled": true,
     "post_action_sleep_s": 0.8,
-    "require_screen_change_for": ["like", "pass", "open_thread", "send_message"],
+    "require_screen_change_for": ["like", "pass", "open_thread", "send_message", "dismiss_overlay"],
     "max_consecutive_failures": 4
   }
 }

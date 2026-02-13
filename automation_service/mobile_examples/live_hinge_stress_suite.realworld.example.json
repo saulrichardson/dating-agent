@@ -1,0 +1,77 @@
+{
+  "scenarios": [
+    {
+      "name": "dryrun_explore_short",
+      "overrides": {
+        "command_query": "Explore freely for 8 actions. Dry run.",
+        "dry_run": true,
+        "max_actions": 8,
+        "capture_each_action": false
+      },
+      "assertions": {
+        "min_unique_actions": 1
+      }
+    },
+    {
+      "name": "live_swipe_low_threshold_short",
+      "overrides": {
+        "command_query": "Live run for 6 actions, quality above 55, max likes 3, max passes 6.",
+        "dry_run": false,
+        "max_actions": 6,
+        "capture_each_action": true
+      },
+      "assertions": {
+        "max_validation_failed": 3,
+        "expect_actions_any": [
+          "like",
+          "pass",
+          "goto_discover",
+          "back"
+        ]
+      }
+    },
+    {
+      "name": "live_force_discover_comment",
+      "overrides": {
+        "command_query": "Go to discover. Send message now. Live run for 6 actions.",
+        "dry_run": false,
+        "max_actions": 6,
+        "capture_each_action": true
+      },
+      "assertions": {
+        "max_validation_failed": 3,
+        "expect_actions_any": [
+          "send_message",
+          "goto_discover",
+          "back"
+        ]
+      }
+    },
+    {
+      "name": "llm_dry_profile_richness",
+      "overrides": {
+        "command_query": "Message oriented run for 8 actions. Dry run.",
+        "dry_run": true,
+        "max_actions": 8,
+        "decision_engine": {
+          "type": "llm",
+          "llm_failure_mode": "fallback_deterministic",
+          "llm": {
+            "model": "gpt-4.1-mini",
+            "temperature": 0.2,
+            "timeout_s": 30,
+            "api_key_env": "OPENAI_API_KEY",
+            "base_url": "https://api.openai.com",
+            "include_screenshot": true,
+            "image_detail": "auto",
+            "max_observed_strings": 140
+          }
+        },
+        "capture_each_action": false
+      },
+      "assertions": {
+        "min_unique_actions": 1
+      }
+    }
+  ]
+}

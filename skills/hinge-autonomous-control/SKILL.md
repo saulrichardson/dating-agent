@@ -42,6 +42,15 @@ This skill is optimized for coding agents that need both deterministic control a
 3. Switch to LLM mode and keep `llm_failure_mode=fallback_deterministic` until stable.
 4. Move to `dry_run=false` only after action validation is consistently passing.
 
+## High-Signal Config Knobs
+
+These config keys make live runs significantly more robust:
+
+- `target_package`: defaults to `co.hinge.app`. When the foreground app drifts (e.g. launcher), the agent will stop executing Hinge actions.
+- `target_activity`: defaults to `.ui.AppActivity`. Used for optional foreground recovery.
+- `foreground_recovery`: when enabled, the live agent uses `adb shell am start -n <target_package>/<target_activity>` to bring Hinge back to the foreground if Android drifts away mid-run.
+- `locators.overlay_close`: enables the high-level `dismiss_overlay` action on overlays like Rose sheets and the "out of free likes" paywall.
+
 ## Artifact Contract
 
 The live agent writes:
@@ -85,5 +94,6 @@ Use `observe` + `execute` when a human/operator wants direct action control.
 - Keep `validation.max_consecutive_failures` low during live runs.
 - If `send_message` fails on locators, stop and fix selectors before continuing.
 - Discover messaging requires `discover_message_input` + `discover_send` locators (examples use `Edit comment` and `Send like`).
+- If overlays block progress (Rose sheet or paywall), ensure `locators.overlay_close` is configured so `dismiss_overlay` is available.
 - If you hit the "out of free likes" paywall (`hinge_like_paywall`), stop or back out; the account may not be able to send likes/comments until quota resets or the user upgrades.
 - Prefer explicit errors to silent fallback behavior.

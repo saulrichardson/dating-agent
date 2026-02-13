@@ -39,6 +39,16 @@ flowchart LR
   Agent -. "optional LLM decision" .-> LLM["OpenAI API"]
 ```
 
+### Full-Fidelity Packaging (Owned Contract)
+
+```mermaid
+flowchart LR
+  Capture["Full-Fidelity Capture\n(full_fidelity_hinge.py)"] --> SessionDir[("session_dir/\nframes.jsonl\nprofiles.jsonl\nmessages.jsonl\nnodes.jsonl\nsummary.json")]
+  SessionDir --> Packager["Package Builder\n(scripts/build-hinge-session-package.py)"]
+  Packager --> Contract[("package_contract_*/\nsession_package.json\nprofiles_index.jsonl\nthreads_index.jsonl\nmanifest.json\nassets/")]
+  Contract --> Downstream["Downstream Pipelines\n(LLM scoring, analytics, replay)"]
+```
+
 ## Decision Loop
 
 ```mermaid
@@ -64,6 +74,14 @@ sequenceDiagram
   A->>F: append action log + packet log + snapshots
   A->>P: validate post-action transition (optional)
 ```
+
+## High-Signal Runtime Controls
+
+Key config knobs (in `automation_service/mobile_examples/live_hinge_agent*.json`) that matter in real sessions:
+
+- `target_package` and `target_activity`: identify the app surface we should control (`co.hinge.app/.ui.AppActivity`).
+- `foreground_recovery`: when enabled, the live agent uses `adb shell am start` to bring Hinge back if Android drifts to launcher mid-run.
+- `locators.overlay_close`: enables a dedicated high-level action `dismiss_overlay` for Rose sheets / paywalls.
 
 ## Quick Start
 
@@ -204,12 +222,73 @@ Runs a simulated Appium contract test that validates:
 
 - high-level Hinge action coverage
 - Discover like/comment/send flow behavior
+- Overlay handling (`dismiss_overlay`) when `locators.overlay_close` is provided
 - low-level MCP control primitives (find/click/type/tap/swipe/keycode/source/screenshot)
 
 ```bash
 source venv/bin/activate
 python scripts/validate-hinge-control-contract.py
 ```
+
+### 6) Live MCP stress probe (real device/session)
+
+Exercises both MCP high-level and low-level controls against the active Hinge surface:
+
+```bash
+source venv/bin/activate
+python scripts/stress-test-hinge-mcp-live.py \
+  --config automation_service/mobile_examples/live_hinge_agent.example.json \
+  --steps 4 \
+  --mode deterministic \
+  --live
+```
+
+### 7) Real-world live agent stress suite
+
+Uses a no-messages-tolerant suite (works even when Messages has no thread responses yet):
+
+```bash
+source venv/bin/activate
+export OPENAI_API_KEY=...
+python scripts/stress-test-live-hinge-agent.py \
+  --base-config automation_service/mobile_examples/live_hinge_agent.example.json \
+  --suite-config automation_service/mobile_examples/live_hinge_stress_suite.realworld.example.json
+```
+
+Note:
+- If LLM calls hit quota/rate limits, `llm_failure_mode=fallback_deterministic` keeps runs moving and logs the fallback reason.
+
+### 8) Targeted live Discover comment-like probe
+
+For validating "Like with comment" behavior directly:
+
+```bash
+source venv/bin/activate
+python - <<'PY'
+from automation_service.mobile.live_hinge_agent import run_live_hinge_agent
+run_live_hinge_agent(
+    config_json_path="automation_service/mobile_examples/live_hinge_agent.live_comment_probe.example.json"
+)
+PY
+```
+
+### 9) Package full-fidelity session into owned contract
+
+Build a portable structured package from a full-fidelity capture session:
+
+```bash
+source venv/bin/activate
+python scripts/build-hinge-session-package.py \
+  --summary-json artifacts/full_fidelity_hinge/<session>/summary.json \
+  --copy-assets
+```
+
+Outputs:
+- `session_package.json` (contract payload)
+- `profiles_index.jsonl`
+- `threads_index.jsonl`
+- `manifest.json`
+- copied `assets/` (optional)
 
 ## Repo Layout
 
