@@ -128,6 +128,11 @@ Tool docs:
 - `docs/hinge-mcp-tools.md`
 - `skills/hinge-autonomous-control/SKILL.md`
 
+The MCP surface supports both:
+
+- high-level autonomous control (`observe`, `decide`, `step`, `execute`)
+- low-level operator control (`find_elements`, `click_element`, `type_into_element`, `tap_point`, `swipe_points`, `press_keycode`, `get_page_source`, `capture_screenshot`)
+
 ## Core Workflows
 
 ### 1) Deterministic validation run
@@ -191,6 +196,19 @@ run_offline_artifact_extraction(
     config_json_path="automation_service/mobile_examples/offline_artifact_extract.hinge.example.json"
 )
 PY
+```
+
+### 5) Control contract validation (no emulator required)
+
+Runs a simulated Appium contract test that validates:
+
+- high-level Hinge action coverage
+- Discover like/comment/send flow behavior
+- low-level MCP control primitives (find/click/type/tap/swipe/keycode/source/screenshot)
+
+```bash
+source venv/bin/activate
+python scripts/validate-hinge-control-contract.py
 ```
 
 ## Repo Layout

@@ -72,7 +72,9 @@ Start:
 Tool flow:
 
 1. `start_session(config_json_path=...)`
-2. `step(mode="llm", execute_action=true, ...)` repeatedly
+2. Use either:
+   - autonomous loop: `step(mode="llm", execute_action=true, ...)` repeatedly
+   - direct control: `observe` + low-level tools (`find_elements`, `click_element`, `type_into_element`, `tap_point`, `swipe_points`, `press_keycode`)
 3. `stop_session()`
 
 Use `observe` + `execute` when a human/operator wants direct action control.

@@ -1,4 +1,4 @@
-.PHONY: help setup emulator appium appium-driver appium-mcp hinge-mcp cli
+.PHONY: help setup emulator appium appium-driver appium-mcp hinge-mcp cli validate-control
 
 help:
 	@echo "Concierge (Appium-first)"
@@ -10,6 +10,7 @@ help:
 	@echo "  make appium-mcp     - Start Appium MCP server"
 	@echo "  make hinge-mcp      - Start Hinge MCP control server"
 	@echo "  make cli            - Run interactive mobile CLI"
+	@echo "  make validate-control - Run no-device hinge control contract checks"
 
 setup:
 	python3 -m venv venv
@@ -32,3 +33,6 @@ hinge-mcp:
 
 cli:
 	. venv/bin/activate && python -m automation_service.cli
+
+validate-control:
+	. venv/bin/activate && python scripts/validate-hinge-control-contract.py
