@@ -13,12 +13,6 @@ venv.bak/
 # Environment files (local secrets)
 .env
 
-# Playwright
-auth-state.json
-
-# Context Service
-context_service/context_storage.json
-
 # Local artifacts / debug dumps
 artifacts/
 
