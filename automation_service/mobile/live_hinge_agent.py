@@ -1949,6 +1949,16 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                 validation_status = "skipped"
                 validation_reason = "action_not_validated"
 
+            post_action_screenshot_path: Optional[Path] = None
+            if capture_each_action:
+                post_action_screenshot_path = _artifact_path(
+                    artifacts_dir=artifacts_dir,
+                    stem=f"hinge_live_{iteration_idx}",
+                    ext="png",
+                )
+                post_action_screenshot_path.write_bytes(client.get_screenshot_png_bytes())
+                state.artifacts.append(post_action_screenshot_path)
+
             event = {
                 "ts": step_ts,
                 "iteration": iteration_idx,
@@ -1967,6 +1977,9 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                 "message_text": message_text,
                 "packet_screenshot_path": None if packet_screenshot_path is None else str(packet_screenshot_path),
                 "packet_xml_path": None if packet_xml_path is None else str(packet_xml_path),
+                "post_action_screenshot_path": None
+                if post_action_screenshot_path is None
+                else str(post_action_screenshot_path),
                 "validation_status": validation_status,
                 "validation_reason": validation_reason,
                 "pre_fingerprint": pre_fingerprint,
@@ -1992,11 +2005,6 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                     f"{state.consecutive_validation_failures}/{max_consecutive_validation_failures}"
                 )
                 break
-
-            if capture_each_action:
-                png_path = _artifact_path(artifacts_dir=artifacts_dir, stem=f"hinge_live_{iteration_idx}", ext="png")
-                png_path.write_bytes(client.get_screenshot_png_bytes())
-                state.artifacts.append(png_path)
 
             time.sleep(loop_sleep_s)
 
