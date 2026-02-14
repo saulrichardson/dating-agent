@@ -45,4 +45,6 @@ Transport: `stdio`.
 - `dismiss_overlay` is a high-level action returned by `action_catalog()` and may appear in `available_actions` when the screen is:
   - `hinge_overlay_rose_sheet` or `hinge_like_paywall`
   - and the config provides `locators.overlay_close` that match a visible close affordance (examples use `content-desc` contains `Close sheet` and `accessibility id` `Close`).
+- LLM mode surfaces additional observability:
+  - `decide`/`step` return `decision.llm_trace` containing latency + token usage (when supported by the API).
 - If Hinge shows the "out of free likes" paywall, the agent may classify the screen as `hinge_like_paywall` and attempt to back out.

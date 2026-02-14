@@ -70,6 +70,7 @@ Use packet logs as the canonical downstream input because each row includes:
 - `message_text` (when applicable)
 - `packet_screenshot_path` / `packet_xml_path` (pre-action evidence, if enabled)
 - `post_action_screenshot_path` (post-action evidence, if `capture_each_action=true`)
+- `llm_trace` (LLM mode only): `status_code`, `latency_ms`, `usage.total_tokens`, and whether an image was included
 
 ## MCP Mode (Free-Form Agents)
 

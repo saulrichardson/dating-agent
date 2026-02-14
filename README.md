@@ -296,6 +296,7 @@ This suite is designed to validate:
 - LLM calls are actually being made (no silent fallback)
 - output is structurally valid (action in `available_actions`, message constraints)
 - optional A/B: with screenshot vs without screenshot
+- `llm_trace` observability (latency + token usage) is present in action logs for auditability
 
 Live probe (dry run, 1 step) plus MCP probe:
 
