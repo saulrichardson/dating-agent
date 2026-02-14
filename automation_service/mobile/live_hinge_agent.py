@@ -1968,8 +1968,12 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                 "package_name": package_name,
                 "screen_type": screen_type,
                 "quality_score_v1": score,
+                # Keep both the compact fields and the full feature object so downstream
+                # evaluation can reproduce packet context without re-parsing XML.
                 "quality_flags": quality_features.get("quality_flags") or [],
                 "profile_name_candidate": quality_features.get("profile_name_candidate"),
+                "quality_features": quality_features,
+                "observed_strings": strings[: min(250, len(strings))],
                 "decision": action,
                 "reason": reason,
                 "dry_run": dry_run,
