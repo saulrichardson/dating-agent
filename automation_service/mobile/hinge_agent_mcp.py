@@ -655,7 +655,7 @@ def decide(
         )
     else:
         try:
-            action, reason, message_text = lha._llm_decide(
+            action, reason, message_text, llm_trace = lha._llm_decide_with_trace(
                 packet=packet,
                 profile=session.profile,
                 decision_engine=session.decision_engine,
@@ -671,6 +671,7 @@ def decide(
                     directive=directive,
                 )
                 reason = f"llm_failed_fallback: {e}; {reason}"
+                llm_trace = {"ok": False, "error": str(e)}
             else:
                 raise
 
@@ -682,6 +683,7 @@ def decide(
             "action": action,
             "reason": reason,
             "message_text": message_text,
+            "llm_trace": llm_trace if mode_norm == "llm" else None,
         },
     }
 
@@ -757,7 +759,7 @@ def step(
         )
     else:
         try:
-            action, reason, message_text = lha._llm_decide(
+            action, reason, message_text, llm_trace = lha._llm_decide_with_trace(
                 packet=packet,
                 profile=session.profile,
                 decision_engine=session.decision_engine,
@@ -773,6 +775,7 @@ def step(
                     directive=directive,
                 )
                 reason = f"llm_failed_fallback: {e}; {reason}"
+                llm_trace = {"ok": False, "error": str(e)}
             else:
                 raise
 
@@ -797,6 +800,7 @@ def step(
             "action": action,
             "reason": reason,
             "message_text": message_text,
+            "llm_trace": llm_trace if mode_norm == "llm" else None,
         },
         "execution": execution,
         "counters": {

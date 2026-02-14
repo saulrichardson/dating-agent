@@ -213,6 +213,18 @@ def _run_live_probe(
             failures.append({"iteration": row.get("iteration"), "issue": "fallback_used", "reason": reason})
         if str(row.get("decision") or "") == "error":
             failures.append({"iteration": row.get("iteration"), "issue": "action_error", "reason": reason})
+        trace = row.get("llm_trace")
+        if not isinstance(trace, dict):
+            failures.append({"iteration": row.get("iteration"), "issue": "missing_llm_trace"})
+        else:
+            if trace.get("ok") is not True:
+                failures.append(
+                    {
+                        "iteration": row.get("iteration"),
+                        "issue": "llm_trace_not_ok",
+                        "llm_trace": trace,
+                    }
+                )
 
     return {
         "ok": not failures,

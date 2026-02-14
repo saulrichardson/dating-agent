@@ -1305,6 +1305,24 @@ def _llm_decide(
     nl_query: Optional[str],
     screenshot_png_bytes: Optional[bytes],
 ) -> tuple[str, str, Optional[str]]:
+    action, reason, message_text, _ = _llm_decide_with_trace(
+        packet=packet,
+        profile=profile,
+        decision_engine=decision_engine,
+        nl_query=nl_query,
+        screenshot_png_bytes=screenshot_png_bytes,
+    )
+    return action, reason, message_text
+
+
+def _llm_decide_with_trace(
+    *,
+    packet: dict[str, Any],
+    profile: HingeAgentProfile,
+    decision_engine: DecisionEngineConfig,
+    nl_query: Optional[str],
+    screenshot_png_bytes: Optional[bytes],
+) -> tuple[str, str, Optional[str], dict[str, Any]]:
     if not decision_engine.llm_model:
         raise LiveHingeAgentError("decision_engine.llm.model is required when type='llm'")
 
@@ -1407,6 +1425,7 @@ def _llm_decide(
         "Content-Type": "application/json",
     }
 
+    started = time.time()
     try:
         response = requests.post(
             url,
@@ -1422,6 +1441,19 @@ def _llm_decide(
         body = response.json()
     except Exception as e:
         raise LiveHingeAgentError(f"LLM API returned non-JSON response: {e}") from e
+
+    latency_ms = int(round((time.time() - started) * 1000))
+    trace: dict[str, Any] = {
+        "ok": response.status_code < 400,
+        "status_code": int(response.status_code),
+        "latency_ms": latency_ms,
+        "endpoint": url,
+        "model": body.get("model") or decision_engine.llm_model,
+        "response_id": body.get("id"),
+        "usage": body.get("usage") if isinstance(body.get("usage"), dict) else None,
+        "has_image": bool(screenshot_png_bytes is not None and decision_engine.llm_include_screenshot),
+        "image_detail": decision_engine.llm_image_detail,
+    }
 
     if response.status_code >= 400:
         raise LiveHingeAgentError(f"LLM API error {response.status_code}: {body}")
@@ -1454,7 +1486,7 @@ def _llm_decide(
         # Keep the log shape deterministic for non-message actions.
         message_text = None
 
-    return action, reason, message_text
+    return action, reason, message_text, trace
 
 
 def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
@@ -1812,6 +1844,7 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
             action = "wait"
             reason = "no_action"
             message_text: Optional[str] = None
+            llm_trace: Optional[dict[str, Any]] = None
 
             if decision_engine.type == "deterministic":
                 action, reason, message_text = _deterministic_decide(
@@ -1822,7 +1855,7 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                 )
             else:
                 try:
-                    action, reason, message_text = _llm_decide(
+                    action, reason, message_text, llm_trace = _llm_decide_with_trace(
                         packet=packet,
                         profile=profile,
                         decision_engine=decision_engine,
@@ -1830,6 +1863,7 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                         screenshot_png_bytes=llm_screenshot_png_bytes,
                     )
                 except Exception as e:
+                    llm_trace = {"ok": False, "error": str(e)}
                     if decision_engine.llm_failure_mode == "fallback_deterministic":
                         action, reason, message_text = _deterministic_decide(
                             packet=packet,
@@ -1978,6 +2012,7 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                 "reason": reason,
                 "dry_run": dry_run,
                 "available_actions": available_actions,
+                "llm_trace": llm_trace,
                 "matched_locator": None
                 if matched_locator is None
                 else {"using": matched_locator.using, "value": matched_locator.value},
