@@ -290,6 +290,72 @@ Outputs:
 - `manifest.json`
 - copied `assets/` (optional)
 
+### 10) LLM Validation Suite (live + offline)
+
+This suite is designed to validate:
+- LLM calls are actually being made (no silent fallback)
+- output is structurally valid (action in `available_actions`, message constraints)
+- optional A/B: with screenshot vs without screenshot
+
+Live probe (dry run, 1 step) plus MCP probe:
+
+```bash
+source venv/bin/activate
+adb shell am start -n co.hinge.app/.ui.AppActivity
+python scripts/validate-llm-suite.py \
+  --config automation_service/mobile_examples/live_hinge_agent.llm.example.json \
+  --live \
+  --live-steps 1 \
+  --mcp-probe
+```
+
+Offline evaluation against a captured action log:
+
+```bash
+source venv/bin/activate
+python scripts/validate-llm-suite.py \
+  --config automation_service/mobile_examples/live_hinge_agent.llm.example.json \
+  --offline-action-log artifacts/live_hinge_llm/<action_log>.json \
+  --offline-max-rows 6 \
+  --offline-repeat 2 \
+  --ablate-screenshot
+```
+
+Synthetic suite (no Appium needed; exercises message generation, overlay recovery, and injection resistance):
+
+```bash
+source venv/bin/activate
+python scripts/validate-llm-suite.py \
+  --config automation_service/mobile_examples/live_hinge_agent.llm.example.json \
+  --synthetic
+```
+
+Session package contract check:
+
+```bash
+source venv/bin/activate
+python scripts/validate-llm-suite.py \
+  --config automation_service/mobile_examples/live_hinge_agent.llm.example.json \
+  --session-package artifacts/full_fidelity_hinge/<session>/package_contract_*/session_package.json
+```
+
+### 11) System Validation Suite (one command)
+
+Aggregate runner that can execute a selection of:
+- hinge control contract
+- LLM synthetic suite
+- live LLM probe + MCP probe
+- live stress suite
+- session-package contract check
+
+Example (runs contract + synthetic + live probe):
+
+```bash
+source venv/bin/activate
+adb shell am start -n co.hinge.app/.ui.AppActivity
+python scripts/validate-system-suite.py --run-synthetic --run-live --live-steps 1
+```
+
 ## Repo Layout
 
 - `automation_service/mobile/` -> Appium runtime, agent, capture, extraction modules.
