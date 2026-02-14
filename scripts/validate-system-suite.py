@@ -52,6 +52,31 @@ def _parser() -> argparse.ArgumentParser:
         help="Run synthetic LLM validation suite (no Appium needed).",
     )
     p.add_argument(
+        "--run-regression",
+        action="store_true",
+        help="Run offline LLM regression dataset (no Appium needed, but requires OPENAI_API_KEY).",
+    )
+    p.add_argument(
+        "--regression-dataset",
+        default="datasets/hinge_llm_regression/cases.synthetic.v1.jsonl",
+        help="Dataset JSONL for regression runs.",
+    )
+    p.add_argument(
+        "--regression-baseline",
+        default="",
+        help="Optional baseline JSONL for regression drift detection.",
+    )
+    p.add_argument(
+        "--run-long-horizon",
+        action="store_true",
+        help="Run long-horizon rollout simulation suite (no Appium needed, but requires OPENAI_API_KEY).",
+    )
+    p.add_argument(
+        "--long-horizon-scenarios",
+        default="datasets/hinge_rollouts/scenarios.synthetic.v1.json",
+        help="Scenario JSON for long-horizon simulation runs.",
+    )
+    p.add_argument(
         "--run-stress",
         action="store_true",
         help="Run the real-world stress suite (requires emulator + Appium + Hinge foreground).",
@@ -136,6 +161,37 @@ def main() -> int:
             )
         )
 
+    if args.run_regression:
+        cmd = [
+            sys.executable,
+            str((REPO_ROOT / "scripts" / "run-llm-regression.py").resolve()),
+            "--dataset",
+            str(Path(args.regression_dataset).resolve()),
+            "--include-screenshot",
+            "--temperature",
+            "0",
+            "--max-cases",
+            "25",
+        ]
+        if args.regression_baseline:
+            cmd.extend(["--baseline", str(Path(args.regression_baseline).resolve())])
+        steps.append(_run(cmd, name="llm_regression_dataset"))
+
+    if args.run_long_horizon:
+        steps.append(
+            _run(
+                [
+                    sys.executable,
+                    str((REPO_ROOT / "scripts" / "validate-long-horizon.py").resolve()),
+                    "--scenarios",
+                    str(Path(args.long_horizon_scenarios).resolve()),
+                    "--temperature",
+                    "0",
+                ],
+                name="llm_long_horizon_rollouts",
+            )
+        )
+
     if args.run_live:
         steps.append(
             _run(
@@ -195,6 +251,11 @@ def main() -> int:
             "run_live": bool(args.run_live),
             "live_steps": int(args.live_steps),
             "run_synthetic": bool(args.run_synthetic),
+            "run_regression": bool(args.run_regression),
+            "regression_dataset": str(Path(args.regression_dataset).resolve()),
+            "regression_baseline": str(Path(args.regression_baseline).resolve()) if args.regression_baseline else None,
+            "run_long_horizon": bool(args.run_long_horizon),
+            "long_horizon_scenarios": str(Path(args.long_horizon_scenarios).resolve()),
             "run_stress": bool(args.run_stress),
             "stress_base_config": str(Path(args.stress_base_config).resolve()),
             "stress_suite_config": str(Path(args.stress_suite_config).resolve()),
@@ -219,4 +280,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

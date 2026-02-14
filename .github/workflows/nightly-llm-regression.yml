@@ -1,0 +1,48 @@
+name: nightly-llm-regression
+
+on:
+  schedule:
+    # Nightly (UTC). Adjust as needed.
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.OPENAI_API_KEY != '' }}
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Offline LLM Regression Dataset
+        run: |
+          python scripts/run-llm-regression.py \
+            --dataset datasets/hinge_llm_regression/cases.synthetic.v1.jsonl \
+            --include-screenshot \
+            --temperature 0 \
+            --baseline datasets/hinge_llm_regression/baselines/baseline_gpt-4.1-mini.jsonl \
+            --max-cases 25
+
+      - name: Long-Horizon Rollout Simulation
+        run: |
+          python scripts/validate-long-horizon.py \
+            --scenarios datasets/hinge_rollouts/scenarios.synthetic.v1.json
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: validation-reports
+          path: artifacts/validation/

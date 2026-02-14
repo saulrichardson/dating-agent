@@ -72,6 +72,42 @@ Use packet logs as the canonical downstream input because each row includes:
 - `post_action_screenshot_path` (post-action evidence, if `capture_each_action=true`)
 - `llm_trace` (LLM mode only): `status_code`, `latency_ms`, `usage.total_tokens`, and whether an image was included
 
+## Validation & Drift Detection
+
+Offline (no device) suites to prove we are leveraging the LLM and to detect drift over time:
+
+1. Synthetic LLM suite:
+
+```bash
+source venv/bin/activate
+export OPENAI_API_KEY=...
+python scripts/validate-llm-suite.py \
+  --config automation_service/mobile_examples/live_hinge_agent.llm.example.json \
+  --synthetic
+```
+
+2. Offline regression dataset (snapshot testing lane):
+
+```bash
+source venv/bin/activate
+export OPENAI_API_KEY=...
+python scripts/run-llm-regression.py \
+  --dataset datasets/hinge_llm_regression/cases.synthetic.v1.jsonl \
+  --include-screenshot \
+  --temperature 0 \
+  --baseline datasets/hinge_llm_regression/baselines/baseline_gpt-4.1-mini.jsonl
+```
+
+3. Long-horizon rollouts (multi-step task validation):
+
+```bash
+source venv/bin/activate
+export OPENAI_API_KEY=...
+python scripts/validate-long-horizon.py \
+  --scenarios datasets/hinge_rollouts/scenarios.synthetic.v1.json \
+  --temperature 0
+```
+
 ## MCP Mode (Free-Form Agents)
 
 Start:

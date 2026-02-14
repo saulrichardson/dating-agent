@@ -345,6 +345,8 @@ python scripts/validate-llm-suite.py \
 Aggregate runner that can execute a selection of:
 - hinge control contract
 - LLM synthetic suite
+- offline regression dataset suite (no device)
+- long-horizon rollout simulation (no device)
 - live LLM probe + MCP probe
 - live stress suite
 - session-package contract check
@@ -357,10 +359,85 @@ adb shell am start -n co.hinge.app/.ui.AppActivity
 python scripts/validate-system-suite.py --run-synthetic --run-live --live-steps 1
 ```
 
+### 12) Offline Regression + Drift Detection (nightly-friendly)
+
+This is the "snapshot testing" lane: run the LLM on a fixed dataset of packets and validate:
+
+- output constraints (our deterministic validator)
+- expected action sets per case
+- optional baseline drift detection (action/message deltas)
+- optional LLM-as-judge scoring with caching/budgets (tolerant acceptance)
+
+```mermaid
+flowchart LR
+  Dataset["Dataset JSONL\n(datasets/hinge_llm_regression/*.jsonl)"] --> Runner["scripts/run-llm-regression.py"]
+  Runner --> Decide["LLM Decide\n(action + message)"]
+  Runner --> Validate["Deterministic Validator\n(llm_validation.py)"]
+  Runner -. optional .-> Judge["LLM-as-Judge\n(llm_judge.py + cache)"]
+  Runner --> Report[("artifacts/validation/\nllm_regression_*.json")]
+```
+
+Run the built-in synthetic regression dataset:
+
+```bash
+source venv/bin/activate
+export OPENAI_API_KEY=...
+python scripts/run-llm-regression.py \
+  --dataset datasets/hinge_llm_regression/cases.synthetic.v1.jsonl \
+  --include-screenshot
+```
+
+Generate a baseline snapshot (optional):
+
+```bash
+source venv/bin/activate
+export OPENAI_API_KEY=...
+python scripts/run-llm-regression.py \
+  --dataset datasets/hinge_llm_regression/cases.synthetic.v1.jsonl \
+  --include-screenshot \
+  --temperature 0 \
+  --write-baseline datasets/hinge_llm_regression/baselines/baseline_gpt-4.1-mini.jsonl
+```
+
+Compare against a baseline (drift detection):
+
+```bash
+source venv/bin/activate
+export OPENAI_API_KEY=...
+python scripts/run-llm-regression.py \
+  --dataset datasets/hinge_llm_regression/cases.synthetic.v1.jsonl \
+  --include-screenshot \
+  --temperature 0 \
+  --baseline datasets/hinge_llm_regression/baselines/baseline_gpt-4.1-mini.jsonl
+```
+
+Build a local (private) regression dataset from a real live run:
+
+```bash
+source venv/bin/activate
+python scripts/build-llm-regression-dataset.py \
+  --action-log artifacts/live_hinge_agent/<action_log>.json \
+  --profile-json automation_service/mobile_examples/hinge_agent_profile.example.json \
+  --copy-screenshots
+```
+
+### 13) Long-Horizon Rollout Simulation (multi-step)
+
+This suite validates that the LLM can handle multi-step tasks (overlay recovery, navigation, then message/like),
+without a device by simulating a state machine of Hinge screens.
+
+```bash
+source venv/bin/activate
+export OPENAI_API_KEY=...
+python scripts/validate-long-horizon.py \
+  --scenarios datasets/hinge_rollouts/scenarios.synthetic.v1.json
+```
+
 ## Repo Layout
 
 - `automation_service/mobile/` -> Appium runtime, agent, capture, extraction modules.
 - `automation_service/mobile_examples/` -> runnable JSON configs and example profiles.
+- `datasets/` -> committed synthetic datasets (no PII) for regression + long-horizon simulation.
 - `scripts/` -> emulator/Appium startup + benchmark/stress tooling.
 - `docs/hinge-mcp-tools.md` -> MCP tool contract.
 - `skills/hinge-autonomous-control/SKILL.md` -> operator workflow for agent control.
@@ -391,3 +468,8 @@ Key targets:
 - `make appium-mcp`
 - `make hinge-mcp`
 - `make cli`
+- `make validate-control`
+- `make validate-llm-synthetic`
+- `make llm-regression`
+- `make long-horizon`
+- `make validate-system-synthetic`

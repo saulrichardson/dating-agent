@@ -1,0 +1,294 @@
+{
+  "contract_version": "hinge_rollout_scenarios.v1",
+  "created_at": "2026-02-14T00:00:00",
+  "scenarios": [
+    {
+      "id": "overlay_to_discover_to_message",
+      "description": "Recover from an overlay, navigate to Discover, and generate a comment+like message.",
+      "profile_ref": "../hinge_llm_regression/profile.synthetic.v1.json",
+      "start_state": "overlay_rose_sheet",
+      "terminal_states": [
+        "done"
+      ],
+      "max_steps": 8,
+      "states": {
+        "overlay_rose_sheet": {
+          "nl_query": "Close the overlay and go to discover.",
+          "packet": {
+            "ts": "2026-02-14T00:00:00",
+            "screen_type": "hinge_overlay_rose_sheet",
+            "package_name": "co.hinge.app",
+            "quality_score_v1": 0,
+            "quality_features": {
+              "profile_name_candidate": null,
+              "prompt_answer": null,
+              "like_targets": [],
+              "quality_flags": []
+            },
+            "available_actions": [
+              "dismiss_overlay",
+              "back",
+              "wait"
+            ],
+            "observed_strings": [
+              "Catch their eye by sending a Rose",
+              "Close sheet",
+              "Close"
+            ],
+            "packet_screenshot_path": null,
+            "packet_xml_path": null
+          },
+          "expected": {
+            "expect_action_any": [
+              "dismiss_overlay",
+              "back"
+            ],
+            "require_message": false
+          },
+          "transitions": {
+            "dismiss_overlay": "tab_shell",
+            "back": "tab_shell"
+          }
+        },
+        "tab_shell": {
+          "nl_query": "Go to discover.",
+          "packet": {
+            "ts": "2026-02-14T00:00:00",
+            "screen_type": "hinge_tab_shell",
+            "package_name": "co.hinge.app",
+            "quality_score_v1": 0,
+            "quality_features": {
+              "profile_name_candidate": null,
+              "prompt_answer": null,
+              "like_targets": [],
+              "quality_flags": []
+            },
+            "available_actions": [
+              "goto_discover",
+              "goto_matches",
+              "goto_profile_hub",
+              "wait"
+            ],
+            "observed_strings": [
+              "Discover",
+              "Matches",
+              "Profile Hub"
+            ],
+            "packet_screenshot_path": null,
+            "packet_xml_path": null
+          },
+          "expected": {
+            "expect_action_any": [
+              "goto_discover"
+            ],
+            "require_message": false
+          },
+          "transitions": {
+            "goto_discover": "discover_card_message"
+          }
+        },
+        "discover_card_message": {
+          "nl_query": "Send message now.",
+          "packet": {
+            "ts": "2026-02-14T00:00:00",
+            "screen_type": "hinge_discover_card",
+            "package_name": "co.hinge.app",
+            "quality_score_v1": 92,
+            "quality_features": {
+              "profile_name_candidate": "Sasha",
+              "prompt_answer": "You make me laugh and you show up.",
+              "like_targets": [
+                "Like prompt"
+              ],
+              "quality_flags": [
+                "selfie_verified",
+                "active_today"
+              ]
+            },
+            "available_actions": [
+              "send_message"
+            ],
+            "observed_strings": [
+              "Prompt: I'll brag about you to my friends if. Answer: You make me laugh and you show up.",
+              "Selfie Verified"
+            ],
+            "packet_screenshot_path": null,
+            "packet_xml_path": null
+          },
+          "expected": {
+            "expect_action_any": [
+              "send_message"
+            ],
+            "require_message": true
+          },
+          "transitions": {
+            "send_message": "done"
+          }
+        },
+        "done": {
+          "terminal": true,
+          "packet": {
+            "ts": "2026-02-14T00:00:00",
+            "screen_type": "terminal",
+            "package_name": "co.hinge.app",
+            "quality_score_v1": 0,
+            "quality_features": {},
+            "available_actions": [
+              "wait"
+            ],
+            "observed_strings": [
+              "terminal"
+            ],
+            "packet_screenshot_path": null,
+            "packet_xml_path": null
+          },
+          "expected": {
+            "expect_action_any": [
+              "wait"
+            ],
+            "require_message": false
+          },
+          "transitions": {}
+        }
+      }
+    },
+    {
+      "id": "unknown_recovery_to_like",
+      "description": "Recover from an unknown surface, navigate to Discover, and choose a like action.",
+      "profile_ref": "../hinge_llm_regression/profile.synthetic.v1.json",
+      "start_state": "unknown_surface",
+      "terminal_states": [
+        "done"
+      ],
+      "max_steps": 8,
+      "states": {
+        "unknown_surface": {
+          "nl_query": "If you're stuck, go back until you can reach Discover.",
+          "packet": {
+            "ts": "2026-02-14T00:00:00",
+            "screen_type": "hinge_unknown",
+            "package_name": "co.hinge.app",
+            "quality_score_v1": 0,
+            "quality_features": {},
+            "available_actions": [
+              "back",
+              "wait"
+            ],
+            "observed_strings": [
+              "Some unexpected surface"
+            ],
+            "packet_screenshot_path": null,
+            "packet_xml_path": null
+          },
+          "expected": {
+            "expect_action_any": [
+              "back"
+            ],
+            "require_message": false
+          },
+          "transitions": {
+            "back": "tab_shell_2"
+          }
+        },
+        "tab_shell_2": {
+          "nl_query": "Go to discover.",
+          "packet": {
+            "ts": "2026-02-14T00:00:00",
+            "screen_type": "hinge_tab_shell",
+            "package_name": "co.hinge.app",
+            "quality_score_v1": 0,
+            "quality_features": {},
+            "available_actions": [
+              "goto_discover",
+              "goto_matches",
+              "goto_profile_hub",
+              "wait"
+            ],
+            "observed_strings": [
+              "Discover",
+              "Matches",
+              "Profile Hub"
+            ],
+            "packet_screenshot_path": null,
+            "packet_xml_path": null
+          },
+          "expected": {
+            "expect_action_any": [
+              "goto_discover"
+            ],
+            "require_message": false
+          },
+          "transitions": {
+            "goto_discover": "discover_card_like"
+          }
+        },
+        "discover_card_like": {
+          "nl_query": "Like the profile.",
+          "packet": {
+            "ts": "2026-02-14T00:00:00",
+            "screen_type": "hinge_discover_card",
+            "package_name": "co.hinge.app",
+            "quality_score_v1": 88,
+            "quality_features": {
+              "profile_name_candidate": "Brianna",
+              "prompt_answer": "Cooking for friends is my love language.",
+              "like_targets": [
+                "Like prompt"
+              ],
+              "quality_flags": [
+                "selfie_verified",
+                "active_today"
+              ]
+            },
+            "available_actions": [
+              "like"
+            ],
+            "observed_strings": [
+              "Brianna",
+              "Prompt: A small thing that brings me joy. Answer: Cooking for friends is my love language.",
+              "Selfie Verified",
+              "Active today"
+            ],
+            "packet_screenshot_path": null,
+            "packet_xml_path": null
+          },
+          "expected": {
+            "expect_action_any": [
+              "like"
+            ],
+            "require_message": false
+          },
+          "transitions": {
+            "like": "done"
+          }
+        },
+        "done": {
+          "terminal": true,
+          "packet": {
+            "ts": "2026-02-14T00:00:00",
+            "screen_type": "terminal",
+            "package_name": "co.hinge.app",
+            "quality_score_v1": 0,
+            "quality_features": {},
+            "available_actions": [
+              "wait"
+            ],
+            "observed_strings": [
+              "terminal"
+            ],
+            "packet_screenshot_path": null,
+            "packet_xml_path": null
+          },
+          "expected": {
+            "expect_action_any": [
+              "wait"
+            ],
+            "require_message": false
+          },
+          "transitions": {}
+        }
+      }
+    }
+  ]
+}
+
