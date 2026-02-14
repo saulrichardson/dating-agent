@@ -17,6 +17,7 @@ import requests
 from .android_accessibility import extract_accessible_strings
 from .appium_http_client import AppiumHTTPClient, AppiumHTTPError, WebDriverElementRef
 from .config import load_json_file, require_key
+from .env import ensure_dotenv_loaded
 
 
 class LiveHingeAgentError(RuntimeError):
@@ -1307,6 +1308,8 @@ def _llm_decide(
     if not decision_engine.llm_model:
         raise LiveHingeAgentError("decision_engine.llm.model is required when type='llm'")
 
+    # Prefer explicit exported env vars, but support local `.env` for developer experience.
+    ensure_dotenv_loaded()
     api_key = os.environ.get(decision_engine.llm_api_key_env, "").strip()
     if not api_key:
         raise LiveHingeAgentError(
