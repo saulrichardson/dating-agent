@@ -24,9 +24,10 @@ class UiNode:
     bounds: Optional[list[int]]
 
 
-_BOUNDS_RE = re.compile(r"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]")
+# NOTE: UIAutomator bounds look like: "[875,1357][1001,1483]"
+_BOUNDS_RE = re.compile(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]")
 _PROMPT_ANSWER_RE = re.compile(
-    r"^\\s*prompt:\\s*(?P<prompt>.*?)\\s*answer:\\s*(?P<answer>.*)\\s*$",
+    r"^\s*prompt:\s*(?P<prompt>.*?)\s*answer:\s*(?P<answer>.*)\s*$",
     flags=re.IGNORECASE,
 )
 _PHOTO_NAME_RE = re.compile(r"^(?P<name>.+?)['’]s photo$", flags=re.IGNORECASE)
