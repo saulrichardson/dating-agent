@@ -190,7 +190,7 @@ def main() -> int:
             if not isinstance(nl_query, str) or not nl_query.strip():
                 nl_query = None
 
-            action, reason, message_text, llm_trace = lha._llm_decide_with_trace(
+            action, reason, message_text, target_id, llm_trace = lha._llm_decide_with_trace(
                 packet=copy.deepcopy(packet),
                 profile=profile,
                 decision_engine=decision_engine,
@@ -201,6 +201,7 @@ def main() -> int:
                 action=action,
                 reason=reason,
                 message_text=message_text,
+                target_id=target_id,
                 packet=packet,
                 profile=profile,
             )
@@ -225,6 +226,7 @@ def main() -> int:
                         "action": action,
                         "reason": reason,
                         "message_text": message_text,
+                        "target_id": target_id,
                         "llm_trace": llm_trace,
                         "validation": asdict(validation),
                     },
@@ -283,4 +285,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

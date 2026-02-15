@@ -63,12 +63,16 @@ sequenceDiagram
   P->>D: capture XML + PNG
   D-->>P: XML + PNG
   P-->>A: XML + PNG
+  alt "profile_bundle_capture (optional)"
+    A->>P: Scroll-sweep capture (N viewports)
+    A->>F: Write hinge_profile_bundle.v1 (screenshots + XML + like_candidates)
+  end
   A->>A: classify screen + score profile + list available actions
   alt deterministic mode
     A->>A: choose action by profile policy
   else llm mode
     A->>L: packet (+ screenshot)
-    L-->>A: {action, message_text}
+    L-->>A: {action, reason, message_text, target_id}
   end
   A->>P: execute action
   A->>F: append action log + packet log + snapshots
@@ -82,6 +86,10 @@ Key config knobs (in `automation_service/mobile_examples/live_hinge_agent*.json`
 - `target_package` and `target_activity`: identify the app surface we should control (`co.hinge.app/.ui.AppActivity`).
 - `foreground_recovery`: when enabled, the live agent uses `adb shell am start` to bring Hinge back if Android drifts to launcher mid-run.
 - `locators.overlay_close`: enables a dedicated high-level action `dismiss_overlay` for Rose sheets / paywalls.
+- `profile_bundle_capture`: when enabled, the agent captures a **full profile bundle** on Discover cards:
+  - scroll-sweep screenshots + XML (`hinge_profile_bundle.v1`)
+  - a concrete `like_candidates[]` list (per-item Like targets with `target_id` + tap coordinates)
+  - enables LLM output to include `target_id` so the agent can choose which Like to press
 
 ## Quick Start
 
@@ -144,6 +152,7 @@ Start MCP server:
 Tool docs:
 
 - `docs/hinge-mcp-tools.md`
+- `docs/hinge-profile-bundle.md`
 - `skills/hinge-autonomous-control/SKILL.md`
 
 The MCP surface supports both:

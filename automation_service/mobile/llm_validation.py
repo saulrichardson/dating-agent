@@ -86,6 +86,7 @@ def validate_decision_output(
     action: str,
     reason: str,
     message_text: Optional[str],
+    target_id: Optional[str],
     packet: dict[str, Any],
     profile: lha.HingeAgentProfile,
 ) -> DecisionValidation:
@@ -140,6 +141,26 @@ def validate_decision_output(
         if message_text is not None:
             issues.append("message_text_must_be_null_when_not_sending")
 
+    # Targeting checks for per-item Like buttons on Discover.
+    screen_type = str(packet.get("screen_type") or "")
+    like_candidates = packet.get("like_candidates")
+    candidate_ids: set[str] = set()
+    if isinstance(like_candidates, list):
+        for c in like_candidates:
+            if isinstance(c, dict) and isinstance(c.get("target_id"), str) and c.get("target_id"):
+                candidate_ids.add(str(c["target_id"]))
+
+    if action in {"like", "send_message"} and screen_type == "hinge_discover_card" and candidate_ids:
+        if not isinstance(target_id, str) or not target_id.strip():
+            issues.append("target_id_required_for_like_or_send_message_on_discover")
+        else:
+            checks["target_id_present"] = True
+            if target_id not in candidate_ids:
+                issues.append("target_id_not_in_like_candidates")
+    else:
+        if target_id is not None:
+            issues.append("target_id_must_be_null_when_not_targeting")
+
     # Personalization signals (best-effort).
     qf = packet.get("quality_features") if isinstance(packet.get("quality_features"), dict) else {}
     profile_name = qf.get("profile_name_candidate")
@@ -158,4 +179,3 @@ def validate_decision_output(
 
     ok = not issues
     return DecisionValidation(ok=ok, issues=issues, checks=checks)
-

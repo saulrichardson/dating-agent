@@ -287,7 +287,7 @@ def main() -> int:
         # Stability checks: run N times.
         decisions: list[dict[str, Any]] = []
         for _ in range(max(1, int(args.repeat))):
-            action, reason, message_text, llm_trace = lha._llm_decide_with_trace(
+            action, reason, message_text, target_id, llm_trace = lha._llm_decide_with_trace(
                 packet=copy.deepcopy(packet),
                 profile=profile,
                 decision_engine=decision_engine,
@@ -298,6 +298,7 @@ def main() -> int:
                 action=action,
                 reason=reason,
                 message_text=message_text,
+                target_id=target_id,
                 packet=packet,
                 profile=profile,
             )
@@ -308,6 +309,7 @@ def main() -> int:
                     "action": action,
                     "reason": reason,
                     "message_text": message_text,
+                    "target_id": target_id,
                     "llm_trace": llm_trace,
                     "validation": asdict(validation),
                 }
@@ -405,6 +407,7 @@ def main() -> int:
                 "case_id": case_id,
                 "model": str(args.model),
                 "action": action,
+                "target_id": selected.get("target_id"),
                 "reason": selected.get("reason"),
                 "message_text": message_norm,
                 "message_sha256": hashlib.sha256(_normalize_ws(message_norm).encode("utf-8")).hexdigest(),
