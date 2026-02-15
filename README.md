@@ -272,6 +272,25 @@ run_live_hinge_agent(
 PY
 ```
 
+### 8b) Record A Live Functionality Demo (video + sanitized logs)
+
+This produces short recordings showing:
+
+- `pass` (reject)
+- `like`
+- Discover `send_message` (comment + like)
+
+Outputs include:
+
+- `screenrecord_raw.mp4` (may contain private profile data; do not share)
+- `screenrecord_redacted.mp4` (top portion blacked out; safer for sharing)
+- `action_log_sanitized.json` (no names/prompts; just actions, locators, evidence paths)
+
+```bash
+source venv/bin/activate
+python scripts/record-hinge-functionality-demo.py --record-seconds 20 --redact-top-fraction 0.65
+```
+
 ### 9) Package full-fidelity session into owned contract
 
 Build a portable structured package from a full-fidelity capture session:
