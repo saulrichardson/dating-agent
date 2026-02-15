@@ -15,6 +15,7 @@ Transport: `stdio`.
 - `start_session(config_json_path, session_name="default")`
 - `list_sessions()`
 - `observe(session_name="default", include_screenshot=true)`
+- `capture_profile_bundle(session_name="default", tag=null)`
 - `get_page_source(session_name="default", persist_snapshot_artifact=true)`
 - `capture_screenshot(session_name="default", persist_snapshot_artifact=true)`
 - `find_elements(session_name="default", using="xpath", value="", limit=10, include_text=true, include_rect=true)`
@@ -24,7 +25,7 @@ Transport: `stdio`.
 - `swipe_points(session_name="default", x1=0, y1=0, x2=0, y2=0, duration_ms=600)`
 - `press_keycode(session_name="default", keycode=4, metastate=null)`
 - `decide(session_name="default", command_query=null, mode="llm", include_screenshot=true)`
-- `execute(session_name="default", action="wait", message_text=null, dry_run=null)`
+- `execute(session_name="default", action="wait", message_text=null, target_id=null, dry_run=null)`
 - `step(session_name="default", command_query=null, mode="llm", execute_action=true, dry_run=null, include_screenshot=true)`
 - `dump_state(session_name="default")`
 - `action_catalog()`
@@ -39,6 +40,8 @@ Transport: `stdio`.
 - `step` is the preferred autonomous primitive for agents.
 - Low-level tools (`find_elements`, `click_element`, `type_into_element`, `tap_point`, `swipe_points`, `press_keycode`) are for direct operator control when UI variants break high-level routines.
 - Snapshot artifacts are stored under the config's `artifacts_dir` in `mcp_snapshots/`.
+- `capture_profile_bundle` writes bundles under `artifacts_dir/profile_bundles/` (and returns a `bundle_path`).
+  - It is disabled unless the config JSON enables `profile_bundle_capture.enabled=true`.
 - `send_message` executes different UI sequences depending on `screen_type`:
   - `hinge_discover_card`: uses the Discover composer path (`Like -> Edit/Add comment -> Send like`) when configured.
   - `hinge_chat`: types into the thread composer and taps `Send`.
@@ -47,4 +50,6 @@ Transport: `stdio`.
   - and the config provides `locators.overlay_close` that match a visible close affordance (examples use `content-desc` contains `Close sheet` and `accessibility id` `Close`).
 - LLM mode surfaces additional observability:
   - `decide`/`step` return `decision.llm_trace` containing latency + token usage (when supported by the API).
+- When available, `decide`/`step` also return `decision.target_id` so an autonomous controller can select a specific
+  per-item Like affordance on Discover cards.
 - If Hinge shows the "out of free likes" paywall, the agent may classify the screen as `hinge_like_paywall` and attempt to back out.

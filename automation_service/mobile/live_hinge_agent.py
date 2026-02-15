@@ -18,6 +18,7 @@ from .android_accessibility import extract_accessible_strings
 from .appium_http_client import AppiumHTTPClient, AppiumHTTPError, WebDriverElementRef
 from .config import load_json_file, require_key
 from .env import ensure_dotenv_loaded
+from .hinge_profile_bundle import ProfileBundleCaptureConfig, capture_profile_bundle, parse_profile_bundle_capture_config
 
 
 class LiveHingeAgentError(RuntimeError):
@@ -400,6 +401,45 @@ def _click_any(client: AppiumHTTPClient, *, locators: list[Locator]) -> Locator:
     return matched
 
 
+def _pick_like_candidate(packet: dict[str, Any], *, target_id: Optional[str]) -> Optional[dict[str, Any]]:
+    raw = packet.get("like_candidates")
+    if not isinstance(raw, list):
+        return None
+    candidates = [x for x in raw if isinstance(x, dict)]
+    if not candidates:
+        return None
+    if target_id:
+        for c in candidates:
+            if str(c.get("target_id") or "") == target_id:
+                return c
+        return None
+    # Heuristic default: prefer prompt likes (often highest-signal) when present.
+    for c in candidates:
+        label = str(c.get("label") or "").lower()
+        if "prompt" in label:
+            return c
+    return candidates[0]
+
+
+def _scroll_discover_to_view_index(
+    client: AppiumHTTPClient,
+    *,
+    view_index: int,
+    cfg: ProfileBundleCaptureConfig,
+) -> None:
+    if view_index <= 0:
+        return
+    window_rect = client.get_window_rect()
+    x_mid = int(window_rect["width"] / 2)
+    margin = float(cfg.swipe_margin_pct)
+    y1 = int(window_rect["height"] * (1.0 - margin))
+    y2 = int(window_rect["height"] * margin)
+    for _ in range(int(view_index)):
+        client.swipe(x1=x_mid, y1=y1, x2=x_mid, y2=y2, duration_ms=int(cfg.swipe_duration_ms))
+        if cfg.settle_sleep_s > 0:
+            time.sleep(float(cfg.settle_sleep_s))
+
+
 def _send_message(
     client: AppiumHTTPClient,
     *,
@@ -476,6 +516,25 @@ def _adb_start_activity(*, package_name: str, activity_name: str) -> str:
     return component
 
 
+def _click_discover_send_like(client: AppiumHTTPClient, *, send_locators: list[Locator]) -> Locator:
+    """
+    Click the Discover "Send like" affordance and fail loudly on the known like-quota blocker.
+    """
+    send_locator = _click_any(client, locators=send_locators)
+    try:
+        post_xml = client.get_page_source()
+        post_strings = extract_accessible_strings(post_xml, limit=800)
+        lowered = [s.lower() for s in post_strings]
+        if any("out of free likes" in s for s in lowered):
+            raise LiveHingeAgentError("Discover like blocked: out of free likes")
+    except LiveHingeAgentError:
+        raise
+    except Exception:
+        # Best-effort inspection only.
+        pass
+    return send_locator
+
+
 def _send_discover_message(
     client: AppiumHTTPClient,
     *,
@@ -540,6 +599,30 @@ def _send_discover_message(
         # Composer was already open; annotate with a synthetic locator to keep logs explicit.
         like_locator = Locator(using="synthetic", value="discover_composer_already_open")
     return like_locator, input_locator, send_locator
+
+
+def _send_discover_like(
+    client: AppiumHTTPClient,
+    *,
+    like_locators: list[Locator],
+    send_locators: list[Locator],
+) -> tuple[Locator, Locator]:
+    """
+    Send a Discover-card like flow with no comment:
+    1) tap Like (opens comment composer), 2) tap Send like.
+    """
+
+    like_locator: Optional[Locator] = None
+    try:
+        send_locator = _click_discover_send_like(client, send_locators=send_locators)
+    except Exception:
+        like_locator = _click_any(client, locators=like_locators)
+        time.sleep(0.35)
+        send_locator = _click_discover_send_like(client, send_locators=send_locators)
+
+    if like_locator is None:
+        like_locator = Locator(using="synthetic", value="discover_composer_already_open")
+    return like_locator, send_locator
 
 
 def _render_template(template: str, *, name: Optional[str]) -> str:
@@ -1021,7 +1104,7 @@ def _build_available_actions(
     return sorted(available)
 
 
-def _deterministic_decide(
+def _deterministic_decide_core(
     *,
     packet: dict[str, Any],
     profile: HingeAgentProfile,
@@ -1274,6 +1357,30 @@ def _deterministic_decide(
     return "wait", "default_wait", None
 
 
+def _deterministic_decide(
+    *,
+    packet: dict[str, Any],
+    profile: HingeAgentProfile,
+    state: _RuntimeState,
+    directive: NLDirective,
+) -> tuple[str, str, Optional[str], Optional[str]]:
+    action, reason, message_text = _deterministic_decide_core(
+        packet=packet,
+        profile=profile,
+        state=state,
+        directive=directive,
+    )
+
+    target_id: Optional[str] = None
+    if action in {"like", "send_message"} and str(packet.get("screen_type") or "") == "hinge_discover_card":
+        candidate = _pick_like_candidate(packet, target_id=None)
+        if candidate is not None:
+            raw = str(candidate.get("target_id") or "").strip()
+            target_id = raw or None
+
+    return action, reason, message_text, target_id
+
+
 def _extract_first_json_object(raw: str) -> dict[str, Any]:
     text = raw.strip()
     if not text:
@@ -1306,15 +1413,15 @@ def _llm_decide(
     decision_engine: DecisionEngineConfig,
     nl_query: Optional[str],
     screenshot_png_bytes: Optional[bytes],
-) -> tuple[str, str, Optional[str]]:
-    action, reason, message_text, _ = _llm_decide_with_trace(
+) -> tuple[str, str, Optional[str], Optional[str]]:
+    action, reason, message_text, target_id, _ = _llm_decide_with_trace(
         packet=packet,
         profile=profile,
         decision_engine=decision_engine,
         nl_query=nl_query,
         screenshot_png_bytes=screenshot_png_bytes,
     )
-    return action, reason, message_text
+    return action, reason, message_text, target_id
 
 
 def _llm_decide_with_trace(
@@ -1324,7 +1431,7 @@ def _llm_decide_with_trace(
     decision_engine: DecisionEngineConfig,
     nl_query: Optional[str],
     screenshot_png_bytes: Optional[bytes],
-) -> tuple[str, str, Optional[str], dict[str, Any]]:
+) -> tuple[str, str, Optional[str], Optional[str], dict[str, Any]]:
     if not decision_engine.llm_model:
         raise LiveHingeAgentError("decision_engine.llm.model is required when type='llm'")
 
@@ -1341,6 +1448,9 @@ def _llm_decide_with_trace(
     observed_strings = packet_for_llm.get("observed_strings", [])
     if isinstance(observed_strings, list):
         packet_for_llm["observed_strings"] = observed_strings[: decision_engine.llm_max_observed_strings]
+    raw_like_candidates = packet_for_llm.get("like_candidates", [])
+    if isinstance(raw_like_candidates, list):
+        packet_for_llm["like_candidates"] = [x for x in raw_like_candidates if isinstance(x, dict)][:12]
 
     user_payload = {
         "available_actions": available_actions,
@@ -1406,11 +1516,13 @@ def _llm_decide_with_trace(
                 "content": (
                     "You are an autonomous Hinge action selector and first-message writer. "
                     "Decide the safest next action for the current screen. "
-                    "Return strict JSON with keys: action (string), reason (string), message_text (string|null). "
+                    "Return strict JSON with keys: action (string), reason (string), message_text (string|null), target_id (string|null). "
                     "Action must be exactly one of available_actions. "
                     "Respect profile persona_spec and hard_boundaries. "
                     "If action is send_message, provide concise message_text that follows opener_strategy "
                     "and max_message_chars. If action is not send_message, message_text must be null. "
+                    "If action is like or send_message on a Discover card and packet.like_candidates is non-empty, "
+                    "you must select a target_id from packet.like_candidates[].target_id. Otherwise target_id must be null. "
                     "Do not include any additional keys."
                 ),
             },
@@ -1472,6 +1584,10 @@ def _llm_decide_with_trace(
     message_text = None
     if message_text_raw is not None:
         message_text = _as_non_empty_str(message_text_raw, field="message_text", context="llm_decision")
+    target_id_raw = parsed.get("target_id")
+    target_id: Optional[str] = None
+    if target_id_raw is not None:
+        target_id = _as_non_empty_str(target_id_raw, field="target_id", context="llm_decision")
 
     if action not in available_actions:
         raise LiveHingeAgentError(
@@ -1488,7 +1604,28 @@ def _llm_decide_with_trace(
         # Keep the log shape deterministic for non-message actions.
         message_text = None
 
-    return action, reason, message_text, trace
+    # Validate / normalize target selection.
+    if action in {"like", "send_message"} and str(packet.get("screen_type") or "") == "hinge_discover_card":
+        candidates = packet.get("like_candidates")
+        ids: set[str] = set()
+        if isinstance(candidates, list):
+            for c in candidates:
+                if isinstance(c, dict) and isinstance(c.get("target_id"), str) and c.get("target_id"):
+                    ids.add(str(c["target_id"]))
+        if ids:
+            if target_id is None:
+                raise LiveHingeAgentError("LLM must set target_id for like/send_message when like_candidates exist")
+            if target_id not in ids:
+                raise LiveHingeAgentError(
+                    f"LLM selected unknown target_id={target_id!r}. valid_target_ids={sorted(ids)[:10]}"
+                )
+        else:
+            target_id = None
+    else:
+        if target_id is not None:
+            raise LiveHingeAgentError("target_id must be null unless action is like/send_message on Discover")
+
+    return action, reason, message_text, target_id, trace
 
 
 def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
@@ -1532,6 +1669,14 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
         "persist_packet_log": true,
         "packet_capture_screenshot": true,
         "packet_capture_xml": false,
+        "profile_bundle_capture": {
+          "enabled": false,
+          "max_views": 6,
+          "stop_after_unchanged": 2,
+          "swipe_duration_ms": 650,
+          "swipe_margin_pct": 0.12,
+          "settle_sleep_s": 0.35
+        },
         "validation": {
           "enabled": true,
           "post_action_sleep_s": 0.8,
@@ -1554,6 +1699,13 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
           "discover_send": [...]
         }
       }
+
+    LLM decision output (when decision_engine.type="llm"):
+      - must be strict JSON with keys:
+        - action (string)
+        - reason (string)
+        - message_text (string|null)
+        - target_id (string|null)  # required for Discover like/send_message when like_candidates exist
     """
     config = load_json_file(config_json_path)
     context = config_json_path
@@ -1655,6 +1807,10 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
         )
     )
     packet_capture_xml = bool(config.get("packet_capture_xml", False))
+    profile_bundle_capture_cfg = parse_profile_bundle_capture_config(
+        config.get("profile_bundle_capture"),
+        context=context,
+    )
     validation_raw = config.get("validation", {})
     if validation_raw is None:
         validation_raw = {}
@@ -1705,9 +1861,12 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
     # Keep decision packet artifacts per-run so repeated runs don't overwrite evidence.
     run_artifact_tag = f"{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}_{session_id[:8]}"
     packet_artifacts_dir = artifacts_dir / "decision_packets" / run_artifact_tag
+    profile_bundle_artifacts_dir = artifacts_dir / "profile_bundles" / run_artifact_tag
     outside_target_package_streak = 0
     if packet_capture_screenshot or packet_capture_xml or persist_packet_log:
         _ensure_dir(packet_artifacts_dir)
+    if profile_bundle_capture_cfg.enabled:
+        _ensure_dir(profile_bundle_artifacts_dir)
 
     action_to_locator_key: dict[str, str] = {
         "goto_discover": "discover_tab",
@@ -1819,6 +1978,32 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                 continue
             outside_target_package_streak = 0
 
+            profile_bundle_path: Optional[str] = None
+            profile_fingerprint: Optional[str] = None
+            profile_summary: Optional[dict[str, Any]] = None
+            like_candidates: list[dict[str, Any]] = []
+            if profile_bundle_capture_cfg.enabled and screen_type == "hinge_discover_card":
+                bundle_dir = profile_bundle_artifacts_dir / f"profile_{iteration_idx:04d}"
+                try:
+                    bundle = capture_profile_bundle(
+                        client,
+                        output_dir=bundle_dir,
+                        expected_package=target_package,
+                        screen_type=screen_type,
+                        cfg=profile_bundle_capture_cfg,
+                    )
+                except Exception as e:
+                    raise LiveHingeAgentError(f"profile bundle capture failed: {e}") from e
+                profile_bundle_path = str(bundle.get("bundle_path") or "")
+                profile_fingerprint = str(bundle.get("profile_fingerprint") or "")
+                profile_summary = bundle.get("profile_summary") if isinstance(bundle.get("profile_summary"), dict) else None
+                raw_like_candidates = bundle.get("like_candidates")
+                if isinstance(raw_like_candidates, list):
+                    like_candidates = [x for x in raw_like_candidates if isinstance(x, dict)]
+                # Keep at least the bundle manifest file in the top-level artifacts list.
+                if profile_bundle_path:
+                    state.artifacts.append(Path(profile_bundle_path))
+
             available_actions = _build_available_actions(
                 screen_type=screen_type,
                 client=client,
@@ -1832,6 +2017,10 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                 "package_name": package_name,
                 "quality_score_v1": score,
                 "quality_features": quality_features,
+                "profile_fingerprint": profile_fingerprint,
+                "profile_summary": profile_summary,
+                "like_candidates": like_candidates,
+                "profile_bundle_path": profile_bundle_path,
                 "available_actions": available_actions,
                 "observed_strings": strings[:120],
                 "packet_screenshot_path": None if packet_screenshot_path is None else str(packet_screenshot_path),
@@ -1846,10 +2035,11 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
             action = "wait"
             reason = "no_action"
             message_text: Optional[str] = None
+            target_id: Optional[str] = None
             llm_trace: Optional[dict[str, Any]] = None
 
             if decision_engine.type == "deterministic":
-                action, reason, message_text = _deterministic_decide(
+                action, reason, message_text, target_id = _deterministic_decide(
                     packet=packet,
                     profile=profile,
                     state=state,
@@ -1857,7 +2047,7 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                 )
             else:
                 try:
-                    action, reason, message_text, llm_trace = _llm_decide_with_trace(
+                    action, reason, message_text, target_id, llm_trace = _llm_decide_with_trace(
                         packet=packet,
                         profile=profile,
                         decision_engine=decision_engine,
@@ -1867,7 +2057,7 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                 except Exception as e:
                     llm_trace = {"ok": False, "error": str(e)}
                     if decision_engine.llm_failure_mode == "fallback_deterministic":
-                        action, reason, message_text = _deterministic_decide(
+                        action, reason, message_text, target_id = _deterministic_decide(
                             packet=packet,
                             profile=profile,
                             state=state,
@@ -1878,6 +2068,9 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                         raise
 
             matched_locator: Optional[Locator] = None
+            selected_like_candidate: Optional[dict[str, Any]] = None
+            target_label: Optional[str] = None
+            target_view_index: Optional[int] = None
             validation_status = "skipped"
             validation_reason = "not_run"
             post_screen_type: Optional[str] = None
@@ -1887,7 +2080,49 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                     if state.likes >= profile.swipe_policy.max_likes:
                         raise LiveHingeAgentError("like limit reached")
                     if not dry_run:
-                        matched_locator = _click_any(client, locators=locator_map["like"])
+                        if screen_type == "hinge_discover_card":
+                            discover_send_locators = locator_map.get("discover_send") or locator_map["send"]
+                            selected_like_candidate = _pick_like_candidate(packet, target_id=target_id)
+                            if target_id and selected_like_candidate is None:
+                                raise LiveHingeAgentError(f"Unknown like target_id: {target_id}")
+                            if selected_like_candidate is not None:
+                                tap = selected_like_candidate.get("tap") if isinstance(selected_like_candidate, dict) else None
+                                if not isinstance(tap, dict) or ("x" not in tap) or ("y" not in tap):
+                                    raise LiveHingeAgentError(
+                                        f"like candidate missing tap coordinates: {selected_like_candidate}"
+                                    )
+                                target_label = str(selected_like_candidate.get("label") or "") or None
+                                target_view_index = int(selected_like_candidate.get("view_index") or 0)
+                                _scroll_discover_to_view_index(
+                                    client,
+                                    view_index=target_view_index,
+                                    cfg=profile_bundle_capture_cfg,
+                                )
+                                client.tap(x=int(tap["x"]), y=int(tap["y"]))
+                                # A targeted like must still click the explicit "Send like" affordance
+                                # to ensure the Like is actually sent.
+                                time.sleep(0.35)
+                                try:
+                                    send_locator = _click_discover_send_like(client, send_locators=discover_send_locators)
+                                except Exception as e:
+                                    raise LiveHingeAgentError(
+                                        f"Targeted like tap did not complete Send like for target_id={target_id!r}"
+                                    ) from e
+                                matched_locator = send_locator
+                                reason = f"{reason}; send={send_locator.using}:{send_locator.value}"
+                            else:
+                                like_locator, send_locator = _send_discover_like(
+                                    client,
+                                    like_locators=locator_map["like"],
+                                    send_locators=discover_send_locators,
+                                )
+                                matched_locator = send_locator
+                                reason = (
+                                    f"{reason}; discover_like={like_locator.using}:{like_locator.value}; "
+                                    f"send={send_locator.using}:{send_locator.value}"
+                                )
+                        else:
+                            matched_locator = _click_any(client, locators=locator_map["like"])
                     state.likes += 1
                 elif action == "pass":
                     if state.passes >= profile.swipe_policy.max_passes:
@@ -1911,6 +2146,31 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                         if screen_type == "hinge_discover_card":
                             discover_input_locators = locator_map.get("discover_message_input") or locator_map["message_input"]
                             discover_send_locators = locator_map.get("discover_send") or locator_map["send"]
+                            selected_like_candidate = _pick_like_candidate(packet, target_id=target_id)
+                            if target_id and selected_like_candidate is None:
+                                raise LiveHingeAgentError(f"Unknown like target_id for send_message: {target_id}")
+                            if selected_like_candidate is not None:
+                                tap = selected_like_candidate.get("tap") if isinstance(selected_like_candidate, dict) else None
+                                if not isinstance(tap, dict) or ("x" not in tap) or ("y" not in tap):
+                                    raise LiveHingeAgentError(
+                                        f"send_message like candidate missing tap coordinates: {selected_like_candidate}"
+                                    )
+                                target_label = str(selected_like_candidate.get("label") or "") or None
+                                target_view_index = int(selected_like_candidate.get("view_index") or 0)
+                                _scroll_discover_to_view_index(
+                                    client,
+                                    view_index=target_view_index,
+                                    cfg=profile_bundle_capture_cfg,
+                                )
+                                client.tap(x=int(tap["x"]), y=int(tap["y"]))
+                                # Give the composer animation time to mount.
+                                time.sleep(0.35)
+                                try:
+                                    _find_first_any(client, locators=discover_input_locators)
+                                except Exception as e:
+                                    raise LiveHingeAgentError(
+                                        f"Targeted like tap did not open composer for target_id={target_id!r}"
+                                    ) from e
                             like_locator, input_locator, send_locator = _send_discover_message(
                                 client,
                                 like_locators=locator_map["like"],
@@ -2015,12 +2275,19 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                 "quality_flags": quality_features.get("quality_flags") or [],
                 "profile_name_candidate": quality_features.get("profile_name_candidate"),
                 "quality_features": quality_features,
+                "profile_fingerprint": profile_fingerprint,
+                "profile_bundle_path": profile_bundle_path,
+                "profile_summary": profile_summary,
+                "like_candidates": like_candidates,
                 "observed_strings": strings[: min(250, len(strings))],
                 "decision": action,
                 "reason": reason,
                 "dry_run": dry_run,
                 "available_actions": available_actions,
                 "llm_trace": llm_trace,
+                "target_id": target_id,
+                "target_label": target_label,
+                "target_view_index": target_view_index,
                 "matched_locator": None
                 if matched_locator is None
                 else {"using": matched_locator.using, "value": matched_locator.value},

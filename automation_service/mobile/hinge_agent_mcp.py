@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+import time
 from typing import Any, Optional
 
 from mcp.server.fastmcp import FastMCP
@@ -11,6 +12,19 @@ from .android_accessibility import extract_accessible_strings
 from .appium_http_client import AppiumHTTPClient, WebDriverElementRef
 from .config import load_json_file, require_key
 from . import live_hinge_agent as lha
+from .hinge_observation import (
+    extract_interaction_targets,
+    extract_profile_snapshot,
+    extract_ui_nodes,
+    sha256_json,
+    xml_to_root,
+)
+from .hinge_profile_bundle import (
+    HingeProfileBundleError,
+    ProfileBundleCaptureConfig,
+    capture_profile_bundle as capture_profile_bundle_artifact,
+    parse_profile_bundle_capture_config,
+)
 
 
 @dataclass
@@ -26,6 +40,7 @@ class _ManagedSession:
     default_dry_run: bool
     default_command_query: Optional[str]
     artifacts_dir: Path
+    profile_bundle_capture_cfg: ProfileBundleCaptureConfig
 
 
 _SESSIONS: dict[str, _ManagedSession] = {}
@@ -158,6 +173,35 @@ def _capture_packet(
     quality_features = lha._extract_quality_features(strings)
     score = lha._score_quality(screen_type=screen_type, quality_features=quality_features)
 
+    profile_fingerprint: Optional[str] = None
+    profile_summary: Optional[dict[str, Any]] = None
+    like_candidates: list[dict[str, Any]] = []
+    interaction_extraction_error: Optional[str] = None
+    try:
+        root = xml_to_root(xml)
+        nodes = extract_ui_nodes(root=root, max_nodes=2500)
+        profile_summary = extract_profile_snapshot(strings=strings, nodes=nodes, screen_type=screen_type)
+        if int(profile_summary.get("signal_strength") or 0) > 0:
+            profile_fingerprint = sha256_json(profile_summary)
+        targets = extract_interaction_targets(nodes=nodes, view_index=0, max_targets=120)
+        like_candidates = [
+            {
+                "target_id": t.get("target_id"),
+                "label": t.get("label"),
+                "view_index": t.get("view_index"),
+                "context_text": t.get("context_text") if isinstance(t.get("context_text"), list) else [],
+                "tap": t.get("tap"),
+            }
+            for t in targets
+            if t.get("kind") == "like_button"
+        ][:12]
+    except Exception as e:
+        # Preserve the error so callers know the extraction is incomplete.
+        interaction_extraction_error = str(e)
+        profile_fingerprint = None
+        profile_summary = None
+        like_candidates = []
+
     screenshot_bytes: Optional[bytes] = None
     screenshot_path: Optional[Path] = None
     xml_path: Optional[Path] = None
@@ -190,6 +234,11 @@ def _capture_packet(
         "screen_type": screen_type,
         "quality_score_v1": score,
         "quality_features": quality_features,
+        "profile_fingerprint": profile_fingerprint,
+        "profile_summary": profile_summary,
+        "like_candidates": like_candidates,
+        "profile_bundle_path": None,
+        "interaction_extraction_error": interaction_extraction_error,
         "available_actions": available_actions,
         "observed_strings": strings[:120],
         "limits": {
@@ -211,7 +260,23 @@ def _execute_action(
     dry_run: bool,
     screen_type: str,
     quality_features: dict[str, Any],
+    target_id: Optional[str],
+    like_candidates: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    def _pick_like_candidate() -> Optional[dict[str, Any]]:
+        candidates = [x for x in like_candidates if isinstance(x, dict)]
+        if not candidates:
+            return None
+        if target_id:
+            for c in candidates:
+                if str(c.get("target_id") or "") == target_id:
+                    return c
+            return None
+        for c in candidates:
+            if "prompt" in str(c.get("label") or "").lower():
+                return c
+        return candidates[0]
+
     if action == "wait":
         session.state.last_action = "wait"
         return {"executed": "wait", "dry_run": dry_run}
@@ -237,6 +302,17 @@ def _execute_action(
             if screen_type == "hinge_discover_card":
                 discover_input_locators = session.locator_map.get("discover_message_input") or session.locator_map["message_input"]
                 discover_send_locators = session.locator_map.get("discover_send") or session.locator_map["send"]
+                chosen = _pick_like_candidate()
+                if target_id and chosen is None:
+                    raise RuntimeError(f"Unknown like target_id for send_message: {target_id}")
+                if chosen is not None:
+                    tap = chosen.get("tap")
+                    if not isinstance(tap, dict) or ("x" not in tap) or ("y" not in tap):
+                        raise RuntimeError(f"Like candidate missing tap coords: {chosen}")
+                    session.client.tap(x=int(tap["x"]), y=int(tap["y"]))
+                    time.sleep(0.35)
+                    # Fail fast if the composer does not appear. We do not fall back to a different Like.
+                    lha._find_first_any(session.client, locators=discover_input_locators)
                 like_locator, input_locator, send_locator = lha._send_discover_message(
                     session.client,
                     like_locators=session.locator_map["like"],
@@ -274,7 +350,28 @@ def _execute_action(
             raise RuntimeError("like limit reached")
         matched = None
         if not dry_run:
-            matched = lha._click_any(session.client, locators=session.locator_map["like"])
+            if screen_type == "hinge_discover_card":
+                discover_send_locators = session.locator_map.get("discover_send") or session.locator_map["send"]
+                chosen = _pick_like_candidate()
+                if target_id and chosen is None:
+                    raise RuntimeError(f"Unknown like target_id: {target_id}")
+                if chosen is not None:
+                    tap = chosen.get("tap")
+                    if not isinstance(tap, dict) or ("x" not in tap) or ("y" not in tap):
+                        raise RuntimeError(f"Like candidate missing tap coords: {chosen}")
+                    session.client.tap(x=int(tap["x"]), y=int(tap["y"]))
+                    time.sleep(0.35)
+                    # Like only counts once "Send like" is clicked.
+                    matched = lha._click_discover_send_like(session.client, send_locators=discover_send_locators)
+                else:
+                    _, send_locator = lha._send_discover_like(
+                        session.client,
+                        like_locators=session.locator_map["like"],
+                        send_locators=discover_send_locators,
+                    )
+                    matched = send_locator
+            else:
+                matched = lha._click_any(session.client, locators=session.locator_map["like"])
         session.state.likes += 1
         session.state.last_action = "like"
         return {
@@ -339,6 +436,10 @@ def start_session(config_json_path: str, session_name: str = "default") -> dict[
     )
     locator_map = _parse_locator_map(config, context=context)
     decision_engine = lha._parse_decision_engine(config.get("decision_engine"), context=f"{context}: decision_engine")
+    profile_bundle_capture_cfg = parse_profile_bundle_capture_config(
+        config.get("profile_bundle_capture"),
+        context=context,
+    )
     profile = lha._load_profile(profile_json_path)
     default_dry_run = bool(config.get("dry_run", True))
     default_query = config.get("command_query")
@@ -365,6 +466,7 @@ def start_session(config_json_path: str, session_name: str = "default") -> dict[
         default_dry_run=default_dry_run,
         default_command_query=default_query,
         artifacts_dir=artifacts_dir,
+        profile_bundle_capture_cfg=profile_bundle_capture_cfg,
     )
     _SESSIONS[session_name] = managed
     return {
@@ -413,6 +515,64 @@ def observe(session_name: str = "default", include_screenshot: bool = True) -> d
     return {
         "session_name": session_name,
         "packet": packet,
+    }
+
+
+@mcp.tool()
+def capture_profile_bundle(session_name: str = "default", tag: Optional[str] = None) -> dict[str, Any]:
+    """
+    Capture a full Discover profile bundle (multi-viewport screenshots + XML + interaction targets).
+
+    This is explicit and can be expensive: it performs multiple screenshots/source dumps and scroll swipes,
+    then returns the app to the starting scroll position.
+    """
+    session = _must_get_session(session_name)
+    cfg = session.profile_bundle_capture_cfg
+    if not cfg.enabled:
+        raise RuntimeError(
+            "profile_bundle_capture is disabled for this session config. "
+            "Enable it in the config JSON under profile_bundle_capture.enabled=true."
+        )
+
+    packet, _, _, _ = _capture_packet(
+        session,
+        include_screenshot=False,
+        persist_snapshot_artifacts=False,
+    )
+    if str(packet.get("screen_type") or "") != "hinge_discover_card":
+        raise RuntimeError(
+            f"capture_profile_bundle only supports hinge_discover_card (got screen_type={packet.get('screen_type')!r})"
+        )
+
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    safe_tag = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in (tag or "").strip())
+    if not safe_tag:
+        safe_tag = f"mcp_{ts}"
+    output_dir = (session.artifacts_dir / "profile_bundles" / safe_tag).resolve()
+
+    try:
+        bundle = capture_profile_bundle_artifact(
+            session.client,
+            output_dir=output_dir,
+            expected_package=str(packet.get("package_name") or "") or None,
+            screen_type=str(packet.get("screen_type") or ""),
+            cfg=cfg,
+        )
+    except HingeProfileBundleError as e:
+        raise RuntimeError(str(e)) from e
+
+    like_candidates = bundle.get("like_candidates")
+    if not isinstance(like_candidates, list):
+        like_candidates = []
+
+    return {
+        "captured": True,
+        "contract_version": bundle.get("contract_version"),
+        "bundle_path": bundle.get("bundle_path"),
+        "bundle_dir": bundle.get("bundle_dir"),
+        "profile_fingerprint": bundle.get("profile_fingerprint"),
+        "views_captured": len(bundle.get("views") or []),
+        "like_candidates": like_candidates[:12],
     }
 
 
@@ -652,7 +812,7 @@ def decide(
         raise RuntimeError("mode must be 'llm' or 'deterministic'")
 
     if mode_norm == "deterministic":
-        action, reason, message_text = lha._deterministic_decide(
+        action, reason, message_text, target_id = lha._deterministic_decide(
             packet=packet,
             profile=session.profile,
             state=session.state,
@@ -660,7 +820,7 @@ def decide(
         )
     else:
         try:
-            action, reason, message_text, llm_trace = lha._llm_decide_with_trace(
+            action, reason, message_text, target_id, llm_trace = lha._llm_decide_with_trace(
                 packet=packet,
                 profile=session.profile,
                 decision_engine=session.decision_engine,
@@ -669,7 +829,7 @@ def decide(
             )
         except Exception as e:
             if session.decision_engine.llm_failure_mode == "fallback_deterministic":
-                action, reason, message_text = lha._deterministic_decide(
+                action, reason, message_text, target_id = lha._deterministic_decide(
                     packet=packet,
                     profile=session.profile,
                     state=session.state,
@@ -688,6 +848,7 @@ def decide(
             "action": action,
             "reason": reason,
             "message_text": message_text,
+            "target_id": target_id,
             "llm_trace": llm_trace if mode_norm == "llm" else None,
         },
     }
@@ -698,6 +859,7 @@ def execute(
     session_name: str = "default",
     action: str = "wait",
     message_text: Optional[str] = None,
+    target_id: Optional[str] = None,
     dry_run: Optional[bool] = None,
 ) -> dict[str, Any]:
     """
@@ -717,6 +879,8 @@ def execute(
         dry_run=use_dry_run,
         screen_type=str(packet.get("screen_type") or "hinge_unknown"),
         quality_features=packet.get("quality_features") or {},
+        target_id=target_id,
+        like_candidates=packet.get("like_candidates") if isinstance(packet.get("like_candidates"), list) else [],
     )
     session.state.iterations += 1
     result["counters"] = {
@@ -756,7 +920,7 @@ def step(
         raise RuntimeError("mode must be 'llm' or 'deterministic'")
 
     if mode_norm == "deterministic":
-        action, reason, message_text = lha._deterministic_decide(
+        action, reason, message_text, target_id = lha._deterministic_decide(
             packet=packet,
             profile=session.profile,
             state=session.state,
@@ -764,7 +928,7 @@ def step(
         )
     else:
         try:
-            action, reason, message_text, llm_trace = lha._llm_decide_with_trace(
+            action, reason, message_text, target_id, llm_trace = lha._llm_decide_with_trace(
                 packet=packet,
                 profile=session.profile,
                 decision_engine=session.decision_engine,
@@ -773,7 +937,7 @@ def step(
             )
         except Exception as e:
             if session.decision_engine.llm_failure_mode == "fallback_deterministic":
-                action, reason, message_text = lha._deterministic_decide(
+                action, reason, message_text, target_id = lha._deterministic_decide(
                     packet=packet,
                     profile=session.profile,
                     state=session.state,
@@ -794,6 +958,8 @@ def step(
             dry_run=use_dry_run,
             screen_type=str(packet.get("screen_type") or "hinge_unknown"),
             quality_features=packet.get("quality_features") or {},
+            target_id=target_id,
+            like_candidates=packet.get("like_candidates") if isinstance(packet.get("like_candidates"), list) else [],
         )
         session.state.iterations += 1
 
@@ -805,6 +971,7 @@ def step(
             "action": action,
             "reason": reason,
             "message_text": message_text,
+            "target_id": target_id,
             "llm_trace": llm_trace if mode_norm == "llm" else None,
         },
         "execution": execution,

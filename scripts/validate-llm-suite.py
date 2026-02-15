@@ -267,7 +267,7 @@ def _run_offline_eval(
 
         decisions = []
         for _ in range(max(1, int(repeat))):
-            action, reason, message_text = lha._llm_decide(
+            action, reason, message_text, target_id = lha._llm_decide(
                 packet=packet,
                 profile=profile,
                 decision_engine=decision_engine,
@@ -278,6 +278,7 @@ def _run_offline_eval(
                 action=action,
                 reason=reason,
                 message_text=message_text,
+                target_id=target_id,
                 packet=packet,
                 profile=profile,
             )
@@ -288,6 +289,7 @@ def _run_offline_eval(
                     "action": action,
                     "reason": reason,
                     "message_text": message_text,
+                    "target_id": target_id,
                     "validation": asdict(validation),
                 }
             )
@@ -301,20 +303,39 @@ def _run_offline_eval(
         ablation = None
         if ablate_screenshot and screenshot_bytes is not None:
             ablation_total += 1
-            action_img, reason_img, msg_img = decisions[0]["action"], decisions[0]["reason"], decisions[0]["message_text"]
-            action_txt, reason_txt, msg_txt = lha._llm_decide(
+            action_img, reason_img, msg_img, target_img = (
+                decisions[0]["action"],
+                decisions[0]["reason"],
+                decisions[0]["message_text"],
+                decisions[0].get("target_id"),
+            )
+            action_txt, reason_txt, msg_txt, target_txt = lha._llm_decide(
                 packet=packet,
                 profile=profile,
                 decision_engine=decision_engine,
                 nl_query=str(cfg.get("command_query") or "").strip() or None,
                 screenshot_png_bytes=None,
             )
-            changed = (action_img != action_txt) or ((msg_img or "") != (msg_txt or ""))
+            changed = (
+                (action_img != action_txt)
+                or ((msg_img or "") != (msg_txt or ""))
+                or ((target_img or "") != (target_txt or ""))
+            )
             if changed:
                 ablation_changed += 1
             ablation = {
-                "with_image": {"action": action_img, "reason": reason_img, "message_text": msg_img},
-                "no_image": {"action": action_txt, "reason": reason_txt, "message_text": msg_txt},
+                "with_image": {
+                    "action": action_img,
+                    "reason": reason_img,
+                    "message_text": msg_img,
+                    "target_id": target_img,
+                },
+                "no_image": {
+                    "action": action_txt,
+                    "reason": reason_txt,
+                    "message_text": msg_txt,
+                    "target_id": target_txt,
+                },
                 "changed": changed,
             }
 
@@ -514,7 +535,7 @@ def _run_synthetic_suite(*, config_path: Path) -> dict[str, Any]:
     failures: list[str] = []
     for scenario in scenarios:
         packet = scenario["packet"]
-        action, reason, message_text = lha._llm_decide(
+        action, reason, message_text, target_id = lha._llm_decide(
             packet=packet,
             profile=profile,
             decision_engine=decision_engine,
@@ -525,6 +546,7 @@ def _run_synthetic_suite(*, config_path: Path) -> dict[str, Any]:
             action=action,
             reason=reason,
             message_text=message_text,
+            target_id=target_id,
             packet=packet,
             profile=profile,
         )
@@ -541,6 +563,7 @@ def _run_synthetic_suite(*, config_path: Path) -> dict[str, Any]:
                 "action": action,
                 "reason": reason,
                 "message_text": message_text,
+                "target_id": target_id,
                 "validation": asdict(validation),
             }
         )

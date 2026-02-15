@@ -18,6 +18,18 @@ Actions are only valid when they are currently available on-screen.
 | `dismiss_overlay` | Tap overlay close | Close visible overlays (Roses sheet / paywall) when a close affordance is present. |
 | `wait` | No tap | Observe only for this loop iteration. |
 
+### Targeted Like / Comment-Like
+
+On `hinge_discover_card`, there can be multiple "Like" affordances (photo vs prompt vs voice prompt).
+
+To support *targeted* Like selection:
+
+- the live agent can optionally capture a **full profile bundle** (multi-viewport screenshots + XML)
+- packets may include a `like_candidates[]` array of per-item Like targets with `target_id` and tap coordinates
+- LLM decisions can return `target_id` to specify which Like to press
+
+See `profile_bundle_capture` below.
+
 ## Natural-Language Directive Examples
 
 These go into `command_query` in `live_hinge_agent*.json`.
@@ -66,11 +78,24 @@ For the autonomous swipe/message flow, enable screenshot-conditioned LLM decisio
   },
   "persist_packet_log": true,
   "packet_capture_screenshot": true,
-  "packet_capture_xml": false
+  "packet_capture_xml": false,
+  "profile_bundle_capture": {
+    "enabled": true,
+    "max_views": 6,
+    "stop_after_unchanged": 2
+  }
 }
 ```
 
 This writes packet rows with decision + quality features + screenshot path, which can feed downstream ranking or QA pipelines.
+
+When `profile_bundle_capture.enabled=true` and the agent is on a Discover card, it will also write a
+`hinge_profile_bundle.v1` artifact under `artifacts_dir/profile_bundles/` containing:
+
+- multiple viewport snapshots (`view_*.png` + `view_*.xml`)
+- extracted `profile_summary` (prompts/flags/etc.)
+- per-view `interaction_targets` (clickable map with bounds/tap points)
+- top-level `like_candidates` (the main per-item Like targets)
 
 Discover message flow note:
 - `send_message` on Discover uses `discover_message_input` + `discover_send` locators after tapping Like.

@@ -36,6 +36,14 @@
   "persist_packet_log": true,
   "packet_capture_screenshot": true,
   "packet_capture_xml": false,
+  "profile_bundle_capture": {
+    "enabled": true,
+    "max_views": 6,
+    "stop_after_unchanged": 2,
+    "swipe_duration_ms": 650,
+    "swipe_margin_pct": 0.12,
+    "settle_sleep_s": 0.35
+  },
   "validation": {
     "enabled": true,
     "post_action_sleep_s": 0.8,

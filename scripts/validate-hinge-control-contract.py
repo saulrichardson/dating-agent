@@ -190,6 +190,7 @@ def run_validation() -> None:
             default_dry_run=False,
             default_command_query=None,
             artifacts_dir=artifacts_dir,
+            profile_bundle_capture_cfg=mcpmod.parse_profile_bundle_capture_config(None, context="in-memory"),
         )
 
         try:
@@ -221,11 +222,31 @@ def run_validation() -> None:
                 dry_run=False,
                 screen_type=str(packet["screen_type"]),
                 quality_features=packet["quality_features"],
+                target_id=None,
+                like_candidates=packet.get("like_candidates") or [],
             )
             _assert(execution["executed"] == "send_message", "Expected send_message execution")
             _assert("el-like" in client.clicked_ids, "Expected Discover flow to click Like before composing")
             _assert(any(el == "el-comment" for el, _ in client.sent_text), "Expected message typed into comment field")
             _assert("el-send" in client.clicked_ids, "Expected Discover flow to click Send like")
+
+            # Like must also click Send like (not just open the composer).
+            client.composer_open = False
+            before_clicks = len(client.clicked_ids)
+            like_execution = mcpmod._execute_action(
+                mcpmod._SESSIONS[session_name],
+                action="like",
+                message_text=None,
+                dry_run=False,
+                screen_type=str(packet["screen_type"]),
+                quality_features=packet["quality_features"],
+                target_id=None,
+                like_candidates=packet.get("like_candidates") or [],
+            )
+            _assert(like_execution["executed"] == "like", "Expected like execution")
+            new_clicks = client.clicked_ids[before_clicks:]
+            _assert("el-like" in new_clicks, "Expected Discover like to click Like affordance")
+            _assert("el-send" in new_clicks, "Expected Discover like to click Send like")
 
             overlay_execution = mcpmod._execute_action(
                 mcpmod._SESSIONS[session_name],
@@ -234,6 +255,8 @@ def run_validation() -> None:
                 dry_run=False,
                 screen_type="hinge_like_paywall",
                 quality_features={},
+                target_id=None,
+                like_candidates=[],
             )
             _assert(overlay_execution["executed"] == "dismiss_overlay", "Expected dismiss_overlay execution")
             _assert("el-close" in client.clicked_ids, "Expected overlay close affordance to be clicked")

@@ -50,6 +50,9 @@ These config keys make live runs significantly more robust:
 - `target_activity`: defaults to `.ui.AppActivity`. Used for optional foreground recovery.
 - `foreground_recovery`: when enabled, the live agent uses `adb shell am start -n <target_package>/<target_activity>` to bring Hinge back to the foreground if Android drifts away mid-run.
 - `locators.overlay_close`: enables the high-level `dismiss_overlay` action on overlays like Rose sheets and the "out of free likes" paywall.
+- `profile_bundle_capture`: when enabled, the agent captures a multi-viewport Discover profile bundle (`hinge_profile_bundle.v1`) which:
+  - preserves *full* UI evidence (screenshots + XML) for offline pipelines
+  - provides `like_candidates[]` (per-item Like targets with `target_id` + tap coordinates) so LLM decisions can pick which Like to press
 
 ## Artifact Contract
 
@@ -59,6 +62,7 @@ The live agent writes:
 - Packet log JSONL (`hinge_live_packet_log_*.jsonl`)
 - Optional packet screenshots/XML (`artifacts/.../decision_packets/`)
 - Optional per-action screenshots (`capture_each_action=true`)
+- Optional full profile bundles (`artifacts/.../profile_bundles/`) when `profile_bundle_capture.enabled=true`
 
 Use packet logs as the canonical downstream input because each row includes:
 
@@ -68,6 +72,7 @@ Use packet logs as the canonical downstream input because each row includes:
 - `available_actions`
 - `decision`
 - `message_text` (when applicable)
+- `target_id` (when applicable): for Discover `like`/`send_message` the LLM can select which per-item Like affordance to use
 - `packet_screenshot_path` / `packet_xml_path` (pre-action evidence, if enabled)
 - `post_action_screenshot_path` (post-action evidence, if `capture_each_action=true`)
 - `llm_trace` (LLM mode only): `status_code`, `latency_ms`, `usage.total_tokens`, and whether an image was included
@@ -122,6 +127,7 @@ Tool flow:
 2. Use either:
    - autonomous loop: `step(mode="llm", execute_action=true, ...)` repeatedly
    - direct control: `observe` + low-level tools (`find_elements`, `click_element`, `type_into_element`, `tap_point`, `swipe_points`, `press_keycode`)
+   - explicit full-profile capture: `capture_profile_bundle(...)` (requires `profile_bundle_capture.enabled=true` in config)
 3. `stop_session()`
 
 Use `observe` + `execute` when a human/operator wants direct action control.
