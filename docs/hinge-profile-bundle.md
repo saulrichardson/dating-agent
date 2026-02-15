@@ -67,21 +67,29 @@ An `interaction_target` is a JSON-serializable description of a clickable elemen
 
 - `target_id` (string): stable-ish identifier **within this capture**
 - `kind` (string): category of interaction
-- `label` (string): best-effort label (content-desc preferred)
+- `label` (string): best-effort label (content-desc preferred). May be empty for unlabeled tappable surfaces.
 - `bounds` (list[int]): `[x1, y1, x2, y2]`
 - `tap` (object): `{ "x": int, "y": int }` (center of bounds)
 - `view_index` (int)
 - `node_ordinal` (int): ordinal index in the parsed UI XML node list
+- `class_name` (string|null)
 - `resource_id` (string|null)
+- `area_px` (int): approximate bounds area in pixels
 - `context_text[]` (optional list[string]): only for `kind="like_button"`; nearby content text used to disambiguate which Like to press
 
 Currently recognized `kind` values:
 
 - `like_button`
 - `pass_button`
+- `more_menu`
+- `undo`
 - `send_like`
+- `send_rose`
 - `comment_input`
+- `media_unmute`
 - `close_overlay`
+- `primary_surface` (large unlabeled tappable surface; best-effort, UI-dependent)
+- `unlabeled_clickable` (capped; unlabeled but actionable by attribute)
 - `clickable_other` (capped; used for drift/debug)
 
 ### `like_candidates[]`
