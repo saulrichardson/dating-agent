@@ -434,6 +434,8 @@ def _adb_input_text(text: str) -> None:
     cleaned = re.sub(r"[^A-Za-z0-9 @._,!?'-]", " ", cleaned)
     cleaned = " ".join(cleaned.split())
     adb_text = cleaned.replace(" ", "%s")
+    # adb executes through a remote shell; escape single quotes so they are treated literally.
+    adb_text = adb_text.replace("'", "\\'")
     try:
         subprocess.run(
             ["adb", "shell", "input", "text", adb_text],
