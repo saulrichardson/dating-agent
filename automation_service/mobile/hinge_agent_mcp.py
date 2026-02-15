@@ -225,6 +225,9 @@ def _execute_action(
     if action == "send_message":
         if session.state.messages >= session.profile.message_policy.max_messages:
             raise RuntimeError("message limit reached")
+        # On Discover, sending a message is a "comment + like" and must count against like quotas.
+        if screen_type == "hinge_discover_card" and session.state.likes >= session.profile.swipe_policy.max_likes:
+            raise RuntimeError("like limit reached (discover send_message)")
         outbound = lha._normalize_message_text(
             raw_text=message_text,
             profile=session.profile,
@@ -256,6 +259,8 @@ def _execute_action(
         else:
             locator = None
         session.state.messages += 1
+        if screen_type == "hinge_discover_card":
+            session.state.likes += 1
         session.state.last_action = "send_message"
         return {
             "executed": "send_message",

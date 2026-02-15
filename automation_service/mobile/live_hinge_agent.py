@@ -1896,6 +1896,10 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                 elif action == "send_message":
                     if state.messages >= profile.message_policy.max_messages:
                         raise LiveHingeAgentError("message limit reached")
+                    # On Discover, sending a message is a "comment + like" action and must
+                    # respect like quotas as well.
+                    if screen_type == "hinge_discover_card" and state.likes >= profile.swipe_policy.max_likes:
+                        raise LiveHingeAgentError("like limit reached (discover send_message)")
                     message_text = _normalize_message_text(
                         raw_text=message_text,
                         profile=profile,
@@ -1926,6 +1930,8 @@ def run_live_hinge_agent(*, config_json_path: str) -> LiveHingeAgentResult:
                             )
                             matched_locator = send_locator
                             reason = f"{reason}; input={input_locator.using}:{input_locator.value}"
+                    if screen_type == "hinge_discover_card":
+                        state.likes += 1
                     state.messages += 1
                 elif action == "back":
                     if not dry_run:
