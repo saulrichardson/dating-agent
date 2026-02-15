@@ -20,6 +20,9 @@ class UiNode:
     text: Optional[str]
     content_desc: Optional[str]
     clickable: bool
+    focusable: bool
+    long_clickable: bool
+    scrollable: bool
     enabled: bool
     bounds: Optional[list[int]]
 
@@ -121,6 +124,9 @@ def extract_ui_nodes(*, root: ElementTree.Element, max_nodes: int = 3500) -> lis
                 text=attrib.get("text") or None,
                 content_desc=attrib.get("content-desc") or None,
                 clickable=(attrib.get("clickable") == "true"),
+                focusable=(attrib.get("focusable") == "true"),
+                long_clickable=(attrib.get("long-clickable") == "true"),
+                scrollable=(attrib.get("scrollable") == "true"),
                 enabled=(attrib.get("enabled") == "true"),
                 bounds=bounds,
             )
@@ -332,14 +338,23 @@ def extract_interaction_targets(
 
     targets: list[dict[str, Any]] = []
     other_clickables: list[tuple[str, UiNode]] = []
+    blank_clickables: list[tuple[int, UiNode]] = []
+
+    def _area(bounds: list[int]) -> int:
+        x1, y1, x2, y2 = bounds
+        return max(0, x2 - x1) * max(0, y2 - y1)
 
     for node in nodes:
-        if not node.clickable or not node.enabled:
+        if not node.enabled:
             continue
         if not node.bounds:
             continue
         label = _node_label(node)
         if not label:
+            # Many photo/video surfaces are unlabeled but still tappable. Only include
+            # nodes that appear actionable by attribute, otherwise we'd drown in noise.
+            if node.clickable or node.focusable or node.long_clickable:
+                blank_clickables.append((_area(node.bounds), node))
             continue
 
         lowered = label.lower().strip()
@@ -350,11 +365,22 @@ def extract_interaction_targets(
             kind = "pass_button"
         elif lowered in {"send like", "send"}:
             kind = "send_like"
+        elif lowered.startswith("send a rose"):
+            kind = "send_rose"
         elif ("add a comment" in lowered) or ("edit comment" in lowered):
             kind = "comment_input"
+        elif lowered == "more":
+            kind = "more_menu"
+        elif lowered.startswith("undo"):
+            kind = "undo"
+        elif "unmute" in lowered:
+            kind = "media_unmute"
         elif lowered in {"close", "close sheet"}:
             kind = "close_overlay"
         else:
+            # Only treat unknown labels as actionable if the node itself is marked actionable.
+            if not (node.clickable or node.focusable or node.long_clickable or (node.class_name or "").endswith("Button")):
+                continue
             other_clickables.append((label, node))
 
         if kind is None:
@@ -371,7 +397,9 @@ def extract_interaction_targets(
             "tap": {"x": cx, "y": cy},
             "view_index": int(view_index),
             "node_ordinal": int(node.ordinal),
+            "class_name": node.class_name,
             "resource_id": node.resource_id,
+            "area_px": _area(bounds),
         }
 
         if kind == "like_button":
@@ -403,6 +431,52 @@ def extract_interaction_targets(
 
         targets.append(entry)
 
+    # Include a capped number of large unlabeled clickables. These often correspond to photo/video
+    # surfaces where UIAutomator does not provide an accessibility label, but a user can still tap.
+    blank_clickables.sort(key=lambda x: x[0], reverse=True)
+    blank_limit = min(8, max(0, max_targets - len(targets)))
+    for area, node in blank_clickables[:blank_limit]:
+        if not node.bounds:
+            continue
+        bounds = node.bounds
+        cx, cy = _center(bounds)
+        kind = "primary_surface" if area >= 180_000 else "unlabeled_clickable"
+        entry: dict[str, Any] = {
+            "target_id": f"{kind}:{view_index}:{node.ordinal}",
+            "kind": kind,
+            "label": "",
+            "bounds": list(bounds),
+            "tap": {"x": cx, "y": cy},
+            "view_index": int(view_index),
+            "node_ordinal": int(node.ordinal),
+            "class_name": node.class_name,
+            "resource_id": node.resource_id,
+            "area_px": int(area),
+        }
+
+        # Attach nearby text context (best-effort) to help reason about what the surface represents.
+        scored: list[tuple[float, str]] = []
+        for _, txt, _, (tcx, tcy) in text_nodes:
+            dx = abs(tcx - cx)
+            dy = abs(tcy - cy)
+            score = float(dy) + (float(dx) * 0.35)
+            scored.append((score, txt))
+        scored.sort(key=lambda x: x[0])
+        context: list[str] = []
+        seen: set[str] = set()
+        for _, txt in scored:
+            normalized = " ".join(txt.split()).strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            context.append(normalized)
+            if len(context) >= 2:
+                break
+        if context:
+            entry["context_text"] = context
+
+        targets.append(entry)
+
     # "Other" clickables are helpful for drift/debug but can be large; keep a capped sample.
     other_clickables = other_clickables[: max(0, max_targets - len(targets))]
     for label, node in other_clickables:
@@ -418,7 +492,9 @@ def extract_interaction_targets(
                 "tap": {"x": cx, "y": cy},
                 "view_index": int(view_index),
                 "node_ordinal": int(node.ordinal),
+                "class_name": node.class_name,
                 "resource_id": node.resource_id,
+                "area_px": _area(node.bounds),
             }
         )
 

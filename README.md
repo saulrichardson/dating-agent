@@ -153,6 +153,8 @@ Tool docs:
 
 - `docs/hinge-mcp-tools.md`
 - `docs/hinge-profile-bundle.md`
+- `docs/hinge-profile-package.md`
+- `docs/hinge-profile-operating-model.md`
 - `skills/hinge-autonomous-control/SKILL.md`
 
 The MCP surface supports both:
