@@ -10,46 +10,21 @@ This repository is now a **single methodology codebase**:
 
 Legacy Playwright/browser automation and legacy context/persona microservices were removed.
 
-## Public Walkthrough
+## System Architecture
 
-This section shows the idea in plain terms.
-
-Each sample keeps the app layout visible so you can understand what the agent sees, while personal details are hidden. The colored boxes show the key touch targets the agent can use for its next step.
-
-What this demonstrates:
-
-1. The system reads the current screen.
-2. It identifies clear next choices (like, pass, comment, send, menu).
-3. It picks one choice and executes it on the same screen.
-
-<p>
-  <img src="docs/public_examples/hinge_public_sample_view_01.png" alt="Public sample A" width="320">
-</p>
-<p><em>Sample A: message area and core controls remain visible, while personal details are hidden.</em></p>
-
-<p>
-  <img src="docs/public_examples/hinge_public_sample_view_04.png" alt="Public sample B" width="320">
-</p>
-<p><em>Sample B: multiple selectable targets on one profile view.</em></p>
-
-<p>
-  <img src="docs/public_examples/hinge_public_sample_view_07.png" alt="Public sample C" width="320">
-</p>
-<p><em>Sample C: repeated profile actions across deeper scroll positions.</em></p>
-
-## Architecture
+At runtime, the agent stays on one live mobile session, observes the current screen, chooses the next action, executes it, and stores evidence for review.
 
 ```mermaid
 flowchart LR
   subgraph Host["Local Machine"]
-    CLI["CLI\npython -m automation_service.cli"]
-    MCP["Hinge MCP Server\nscripts/start-hinge-agent-mcp.sh"]
-    Agent["Live Agent\nlive_hinge_agent.py"]
-    Capture["Full-Fidelity Capture\nfull_fidelity_hinge.py"]
-    Offline["Offline Extraction\noffline_artifacts.py"]
+    CLI["CLI"]
+    MCP["MCP Control Server"]
+    Agent["Live Agent"]
+    Capture["Capture Pipeline"]
+    Offline["Offline Extraction"]
     Artifacts[("artifacts/")]
-    Appium["Appium Server\n:4723"]
-    Device["Android Emulator/Device\nHinge/Tinder"]
+    Appium["Appium Server"]
+    Device["Android Emulator/Device"]
 
     CLI --> Agent
     MCP --> Agent
@@ -66,17 +41,43 @@ flowchart LR
   Agent -. "optional LLM decision" .-> LLM["OpenAI API"]
 ```
 
-### Full-Fidelity Packaging (Owned Contract)
+## Detailed Example
+
+The examples below show how the system marks useful action points while keeping personal details hidden.
+
+<p>
+  <img src="docs/public_examples/hinge_public_sample_view_01.png" alt="Public sample A" width="300">
+</p>
+<p><em>Sample A: message area and core controls stay visible so the decision context is clear.</em></p>
+
+<p>
+  <img src="docs/public_examples/hinge_public_sample_view_04.png" alt="Public sample B" width="300">
+</p>
+<p><em>Sample B: multiple possible actions are identified on a single profile view.</em></p>
+
+<p>
+  <img src="docs/public_examples/hinge_public_sample_view_07.png" alt="Public sample C" width="300">
+</p>
+<p><em>Sample C: the same action pattern remains consistent as the profile scrolls.</em></p>
+
+## End-to-End Loop
+
+1. Read the current screen.
+2. Identify the available next actions.
+3. Choose one action.
+4. Execute it and capture evidence.
+
+### Evidence Packaging
 
 ```mermaid
 flowchart LR
-  Capture["Full-Fidelity Capture\n(full_fidelity_hinge.py)"] --> SessionDir[("session_dir/\nframes.jsonl\nprofiles.jsonl\nmessages.jsonl\nnodes.jsonl\nsummary.json")]
-  SessionDir --> Packager["Package Builder\n(scripts/build-hinge-session-package.py)"]
+  Capture["Full-Fidelity Capture"] --> SessionDir[("session_dir/\nframes.jsonl\nprofiles.jsonl\nmessages.jsonl\nnodes.jsonl\nsummary.json")]
+  SessionDir --> Packager["Package Builder"]
   Packager --> Contract[("package_contract_*/\nsession_package.json\nprofiles_index.jsonl\nthreads_index.jsonl\nmanifest.json\nassets/")]
-  Contract --> Downstream["Downstream Pipelines\n(LLM scoring, analytics, replay)"]
+  Contract --> Downstream["Downstream Pipelines"]
 ```
 
-## Decision Loop
+## Decision Loop (Detailed)
 
 ```mermaid
 sequenceDiagram
