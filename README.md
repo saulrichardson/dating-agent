@@ -10,6 +10,40 @@ This repository is now a **single methodology codebase**:
 
 Legacy Playwright/browser automation and legacy context/persona microservices were removed.
 
+## Public Redacted Walkthrough
+
+This is a public-safe snapshot of the Hinge control approach used in this repo:
+
+- blacked-out regions: face/profile and personal text details
+- colored boxes: machine-extracted action targets the agent can execute (`like_button`, `pass_button`, `comment_input`, `send_like`, `more_menu`, `send_rose`)
+- labels on each box: explicit affordance IDs used to make decisions executable
+
+High-level flow:
+
+1. Observe: capture screenshot + UI XML and extract interaction targets.
+2. Decide: choose `{action, target_id}` from available targets.
+3. Act: tap the selected target and validate post-action state.
+
+Sample A: composer + pass/menu controls with extracted targets.
+
+![Public redacted sample view 01](docs/public_examples/hinge_public_sample_view_01.png)
+
+Sample B: multiple Discover `like_button` targets on the same profile surface.
+
+![Public redacted sample view 04](docs/public_examples/hinge_public_sample_view_04.png)
+
+Sample C: repeated media-like affordances; target IDs keep actions deterministic.
+
+![Public redacted sample view 07](docs/public_examples/hinge_public_sample_view_07.png)
+
+To generate the full interactive public-redacted viewer from any bundle:
+
+```bash
+python scripts/redact-hinge-bundle-viewer.py --bundle-dir <bundle_dir> --mode selective
+```
+
+This writes `<bundle_dir>/public_redacted_selective/bundle_viewer.html`.
+
 ## Architecture
 
 ```mermaid
@@ -89,6 +123,7 @@ Key config knobs (in `automation_service/mobile_examples/live_hinge_agent*.json`
 - `profile_bundle_capture`: when enabled, the agent captures a **full profile bundle** on Discover cards:
   - scroll-sweep screenshots + XML (`hinge_profile_bundle.v1`)
   - a concrete `like_candidates[]` list (per-item Like targets with `target_id` + tap coordinates)
+  - best-effort `tile_id` fingerprinting + deduplication so overlapping viewports don’t produce duplicate Like choices
   - enables LLM output to include `target_id` so the agent can choose which Like to press
 
 ## Quick Start
@@ -201,6 +236,17 @@ run_live_hinge_agent(
     config_json_path="automation_service/mobile_examples/live_hinge_agent.llm.example.json"
 )
 PY
+```
+
+### 2b) Visual QA: render a profile bundle viewer (HTML)
+
+If you have a `hinge_profile_bundle.v1` capture directory (contains `profile_bundle.json` and `view_*.png/xml`),
+you can render a single scrollable HTML page that stacks all views and overlays extracted interaction targets.
+This is the fastest way to gut-check that the bundle is capturing the full profile surface and that Like targets
+map to the tiles you expect.
+
+```bash
+python scripts/render-hinge-profile-bundle.py --bundle-dir <bundle_dir> --open
 ```
 
 ### 3) Full-fidelity capture for downstream pipelines
