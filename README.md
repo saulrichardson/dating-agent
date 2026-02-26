@@ -10,11 +10,11 @@ This repository is now a **single methodology codebase**:
 
 Legacy Playwright/browser automation and legacy context/persona microservices were removed.
 
-## Public Redacted Walkthrough
+## Public Walkthrough
 
 This section shows the idea in plain terms.
 
-Each sample keeps the app layout visible so you can understand what the agent sees, while private details are blacked out. The colored boxes show the tap targets the agent can use for its next step.
+Each sample keeps the app layout visible so you can understand what the agent sees, while personal details are hidden. The colored boxes show the key touch targets the agent can use for its next step.
 
 What this demonstrates:
 
@@ -23,17 +23,17 @@ What this demonstrates:
 3. It picks one choice and executes it on the same screen.
 
 <p>
-  <img src="docs/public_examples/hinge_public_sample_view_01.png" alt="Public redacted sample A" width="320">
+  <img src="docs/public_examples/hinge_public_sample_view_01.png" alt="Public sample A" width="320">
 </p>
-<p><em>Sample A: message area and core controls are still visible, with personal details redacted.</em></p>
+<p><em>Sample A: message area and core controls remain visible, while personal details are hidden.</em></p>
 
 <p>
-  <img src="docs/public_examples/hinge_public_sample_view_04.png" alt="Public redacted sample B" width="320">
+  <img src="docs/public_examples/hinge_public_sample_view_04.png" alt="Public sample B" width="320">
 </p>
 <p><em>Sample B: multiple selectable targets on one profile view.</em></p>
 
 <p>
-  <img src="docs/public_examples/hinge_public_sample_view_07.png" alt="Public redacted sample C" width="320">
+  <img src="docs/public_examples/hinge_public_sample_view_07.png" alt="Public sample C" width="320">
 </p>
 <p><em>Sample C: repeated profile actions across deeper scroll positions.</em></p>
 
@@ -333,7 +333,7 @@ This produces short recordings showing:
 Outputs include:
 
 - `screenrecord_raw.mp4` (may contain private profile data; do not share)
-- `screenrecord_redacted.mp4` (top portion blacked out; safer for sharing)
+- a share-safe screen recording copy with the top portion blacked out
 - `action_log_sanitized.json` (no names/prompts; just actions, locators, evidence paths)
 
 ```bash
