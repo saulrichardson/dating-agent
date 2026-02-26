@@ -91,5 +91,3 @@ This system works on real profile screens, so privacy handling is first-class.
 - additional app surfaces can be added through the same observe-decide-act model
 
 ---
-
-If your goal is simple: this repository gives you a working agent that can swipe on dating apps for you, with enough control and visibility to tune behavior safely.
