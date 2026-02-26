@@ -12,37 +12,30 @@ Legacy Playwright/browser automation and legacy context/persona microservices we
 
 ## Public Redacted Walkthrough
 
-This is a public-safe snapshot of the Hinge control approach used in this repo:
+This section shows the idea in plain terms.
 
-- blacked-out regions: face/profile and personal text details
-- colored boxes: machine-extracted action targets the agent can execute (`like_button`, `pass_button`, `comment_input`, `send_like`, `more_menu`, `send_rose`)
-- labels on each box: explicit affordance IDs used to make decisions executable
+Each sample keeps the app layout visible so you can understand what the agent sees, while private details are blacked out. The colored boxes show the tap targets the agent can use for its next step.
 
-High-level flow:
+What this demonstrates:
 
-1. Observe: capture screenshot + UI XML and extract interaction targets.
-2. Decide: choose `{action, target_id}` from available targets.
-3. Act: tap the selected target and validate post-action state.
+1. The system reads the current screen.
+2. It identifies clear next choices (like, pass, comment, send, menu).
+3. It picks one choice and executes it on the same screen.
 
-Sample A: composer + pass/menu controls with extracted targets.
+<p>
+  <img src="docs/public_examples/hinge_public_sample_view_01.png" alt="Public redacted sample A" width="320">
+</p>
+<p><em>Sample A: message area and core controls are still visible, with personal details redacted.</em></p>
 
-![Public redacted sample view 01](docs/public_examples/hinge_public_sample_view_01.png)
+<p>
+  <img src="docs/public_examples/hinge_public_sample_view_04.png" alt="Public redacted sample B" width="320">
+</p>
+<p><em>Sample B: multiple selectable targets on one profile view.</em></p>
 
-Sample B: multiple Discover `like_button` targets on the same profile surface.
-
-![Public redacted sample view 04](docs/public_examples/hinge_public_sample_view_04.png)
-
-Sample C: repeated media-like affordances; target IDs keep actions deterministic.
-
-![Public redacted sample view 07](docs/public_examples/hinge_public_sample_view_07.png)
-
-To generate the full interactive public-redacted viewer from any bundle:
-
-```bash
-python scripts/redact-hinge-bundle-viewer.py --bundle-dir <bundle_dir> --mode selective
-```
-
-This writes `<bundle_dir>/public_redacted_selective/bundle_viewer.html`.
+<p>
+  <img src="docs/public_examples/hinge_public_sample_view_07.png" alt="Public redacted sample C" width="320">
+</p>
+<p><em>Sample C: repeated profile actions across deeper scroll positions.</em></p>
 
 ## Architecture
 
